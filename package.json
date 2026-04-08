@@ -1,0 +1,24 @@
+{
+  "name": "vaultic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A premium API Key Manager for developers",
+  "scripts": {
+    "dev:desktop": "pnpm --filter @vaultic/desktop dev",
+    "dev:website": "pnpm --filter @vaultic/website dev",
+    "build:desktop": "pnpm --filter @vaultic/desktop build",
+    "build:website": "pnpm --filter @vaultic/website build",
+    "build:packages": "pnpm --filter './packages/*' build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

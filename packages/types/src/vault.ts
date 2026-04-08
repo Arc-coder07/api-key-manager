@@ -1,0 +1,50 @@
+// ─── Vault Configuration ────────────────────────────────────────
+// Persisted to LocalForage — contains the PBKDF2 salt and
+// verification hash, but NEVER the master password or derived key.
+
+export interface VaultConfig {
+  /** Base64-encoded PBKDF2 salt for key derivation */
+  salt: string;
+  /** Base64-encoded salt used for verification hash */
+  verificationSalt: string;
+  /** Base64-encoded SHA-256 hash for password verification */
+  verificationHash: string;
+  /** Auto-lock timeout in minutes (default: 15) */
+  autoLockMinutes: number;
+  /** Clipboard auto-clear timeout in seconds (default: 30) */
+  clipboardClearSeconds: number;
+  /** Whether the vault has been initialized with a master password */
+  vaultInitialized: boolean;
+}
+
+// ─── Vault State ────────────────────────────────────────────────
+
+export type VaultStatus = 'uninitialized' | 'locked' | 'unlocked';
+
+export interface VaultState {
+  status: VaultStatus;
+  /** The AES-GCM CryptoKey derived from the master password — RAM only */
+  derivedKey: CryptoKey | null;
+  /** Timestamp of last user activity (for auto-lock) */
+  lastActivity: number;
+}
+
+// ─── Filter Options ─────────────────────────────────────────────
+
+export interface FilterOptions {
+  search: string;
+  category: string | null;
+  tier: string | null;
+  projectId: string | null;
+  expiryStatus: 'all' | 'expiring' | 'expired' | null;
+}
+
+// ─── Drawer State ───────────────────────────────────────────────
+
+export type DrawerMode = 'closed' | 'add' | 'edit' | 'view';
+
+export interface DrawerState {
+  mode: DrawerMode;
+  /** The key ID being edited or viewed (null for 'add' mode) */
+  keyId: string | null;
+}
