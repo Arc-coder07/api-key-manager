@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Copy, Eye, EyeOff, ExternalLink, MoreVertical } from "lucide-react";
+import { motion } from "framer-motion";
+import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
+import { ProviderIcon } from "../ui/ProviderIcon";
 
 interface KeyCardProps {
   id: string;
@@ -11,9 +13,12 @@ interface KeyCardProps {
   expiryDays?: number | null;
   projectName?: string;
   projectColor?: string;
+  dashboardUrl?: string | null;
+  index?: number;
   onCopy?: (id: string) => void;
-  onReveal?: (id: string) => void;
+  onReveal?: (id: string) => Promise<string | null>;
   onClick?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 const tierStyles: Record<string, { bg: string; text: string }> = {
@@ -40,11 +45,18 @@ export function KeyCard({
   expiryDays,
   projectName,
   projectColor,
+  dashboardUrl,
+  index = 0,
   onCopy,
+  onReveal,
   onClick,
+  onDelete,
 }: KeyCardProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [isRevealing, setIsRevealing] = useState(false);
 
   const badgeStyle = tierStyles[tier] ?? tierStyles.free;
   const expiryStyle = getExpiryStyle(expiryDays);
@@ -56,13 +68,41 @@ export function KeyCard({
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const handleReveal = (e: React.MouseEvent) => {
+  const handleReveal = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsRevealed(!isRevealed);
+    if (isRevealed) {
+      setIsRevealed(false);
+      setRevealedKey(null);
+    } else {
+      setIsRevealing(true);
+      try {
+        const plaintext = await onReveal?.(id);
+        if (plaintext) {
+          setRevealedKey(plaintext);
+          setIsRevealed(true);
+          // Auto-hide after 15 seconds
+          setTimeout(() => {
+            setIsRevealed(false);
+            setRevealedKey(null);
+          }, 15000);
+        }
+      } catch (err) {
+        console.error("Reveal error:", err);
+      } finally {
+        setIsRevealing(false);
+      }
+    }
   };
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.3,
+        delay: index * 0.05,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
       onClick={() => onClick?.(id)}
       className="
         group relative flex flex-col gap-3 p-4
@@ -75,28 +115,21 @@ export function KeyCard({
       {/* ─── Top Row: Provider + Badges ──────────────── */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Provider icon placeholder — will use Simple Icons in Phase 1+ */}
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-border-subtle/50 shrink-0">
-            <span className="text-xs font-semibold text-text-secondary uppercase">
-              {provider.slice(0, 2)}
-            </span>
-          </div>
+          <ProviderIcon provider={provider} size={36} />
           <div className="min-w-0">
             <h3 className="text-sm font-medium text-text-primary truncate">
               {name}
             </h3>
-            <p className="text-xs text-text-muted capitalize">{provider}</p>
+            <p className="text-xs text-text-muted capitalize">{provider.replace(/-/g, " ")}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Tier badge */}
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${badgeStyle.bg} ${badgeStyle.text}`}
           >
             {tier}
           </span>
-          {/* Expiry badge */}
           {expiryStyle && (
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${expiryStyle.bg} ${expiryStyle.text}`}
@@ -110,7 +143,7 @@ export function KeyCard({
       {/* ─── Key Display ─────────────────────────────── */}
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-app/50 border border-border-subtle/50">
         <code className="key-display flex-1 truncate">
-          {isRevealed ? "sk-proj-abc...xyz123" : maskedKey}
+          {isRevealing ? "Decrypting..." : isRevealed ? revealedKey : maskedKey}
         </code>
         <button
           onClick={handleReveal}
@@ -152,14 +185,63 @@ export function KeyCard({
             <Copy size={12} />
             <span>{isCopied ? "Copied!" : "Copy"}</span>
           </button>
-          <button
-            className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle/50 hover:text-text-secondary transition-colors"
-            title="More options"
-          >
-            <MoreVertical size={14} />
-          </button>
+
+          {/* Context Menu */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle/50 hover:text-text-secondary transition-colors"
+              title="More options"
+            >
+              <MoreVertical size={14} />
+            </button>
+
+            {showMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu(false);
+                  }}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="absolute right-0 top-full mt-1 z-50 w-40 py-1 rounded-xl bg-sidebar border border-border-subtle shadow-xl"
+                >
+                  {dashboardUrl && (
+                    <a
+                      href={dashboardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink size={12} />
+                      Open Dashboard
+                    </a>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMenu(false);
+                      onDelete?.(id);
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-status-red hover:bg-status-red/10 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    Delete Key
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

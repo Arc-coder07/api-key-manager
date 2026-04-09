@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
   Shield,
   Search,
@@ -6,6 +8,8 @@ import {
   Settings,
   Plus,
   Lock,
+  Pen,
+  Trash2,
 } from "lucide-react";
 
 const navItems = [
@@ -15,23 +19,37 @@ const navItems = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-// Placeholder projects for visual scaffolding (Phase 4 will make these dynamic)
-const dummyProjects = [
-  { id: "1", name: "MedSage", color: "#10b981" },
-  { id: "2", name: "E-commerce", color: "#3b82f6" },
-  { id: "3", name: "Hackathon Nov", color: "#8b5cf6" },
-];
+import { useVaultStore } from "../../stores/useVaultStore";
+import { ProjectModal } from "../projects/ProjectModal";
+import { ProjectDeleteConfirmation } from "../projects/ProjectDeleteConfirmation";
+import type { Project } from "@vaultic/types";
+import { Layers } from "lucide-react";
 
 export function Sidebar() {
   const location = useLocation();
+  const lock = useVaultStore((s) => s.lock);
+  const projects = useVaultStore((s) => s.projects);
+  const activeProjectId = useVaultStore((s) => s.activeProjectId);
+  const setActiveProject = useVaultStore((s) => s.setActiveProject);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+  
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
 
   return (
     <aside className="flex flex-col w-60 h-screen bg-sidebar border-r border-border-subtle shrink-0 no-select">
       {/* ─── Logo ────────────────────────────────────── */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-border-subtle">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent/20">
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent/20"
+        >
           <Shield className="w-4.5 h-4.5 text-accent" size={18} />
-        </div>
+        </motion.div>
         <div>
           <h1 className="text-sm font-semibold text-text-primary tracking-tight">
             Vaultic
@@ -65,10 +83,19 @@ export function Sidebar() {
               `}
             >
               {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full" />
+                <motion.div
+                  layoutId="sidebar-active-indicator"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-accent rounded-r-full"
+                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                />
               )}
               <Icon size={18} strokeWidth={isActive ? 2 : 1.5} />
               <span>{label}</span>
+              {to === "/expiring" && (
+                <span className="ml-auto px-1.5 py-0.5 rounded text-xxs bg-status-amber/15 text-status-amber font-medium">
+                  4
+                </span>
+              )}
             </NavLink>
           );
         })}
@@ -79,37 +106,122 @@ export function Sidebar() {
             <p className="text-xxs font-medium text-text-muted uppercase tracking-widest">
               Projects
             </p>
-            <button
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                setProjectToEdit(null);
+                setIsModalOpen(true);
+              }}
               className="p-1 rounded-md text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
               title="New Project"
             >
               <Plus size={14} />
-            </button>
+            </motion.button>
           </div>
-          <div className="space-y-0.5">
-            {dummyProjects.map((project) => (
-              <button
-                key={project.id}
-                className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg text-sm text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
-              >
+          <div className="space-y-0.5 mt-2">
+            <button
+              onClick={() => setActiveProject(null)}
+              className={`
+                flex items-center gap-2.5 w-full px-3 py-1.5 rounded-lg text-sm transition-colors
+                ${activeProjectId === null 
+                  ? "bg-accent/10 text-accent font-medium" 
+                  : "text-text-secondary hover:bg-card hover:text-text-primary"
+                }
+              `}
+            >
+              <Layers size={14} />
+              <span>All Projects</span>
+            </button>
+            {projects.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-text-muted italic">No custom projects yet</p>
+            ) : (
+              projects.map((project) => (
                 <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: project.color }}
-                />
-                <span className="truncate">{project.name}</span>
-              </button>
-            ))}
+                  key={project.id}
+                  onClick={() => setActiveProject(project.id)}
+                  onMouseEnter={() => setHoveredProjectId(project.id)}
+                  onMouseLeave={() => setHoveredProjectId(null)}
+                  className={`
+                    group flex items-center justify-between w-full px-3 py-1.5 rounded-lg transition-colors cursor-pointer
+                    ${activeProjectId === project.id
+                      ? "bg-accent/10"
+                      : "hover:bg-card"
+                    }
+                  `}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0" title={project.name}>
+                    <motion.div
+                      whileHover={{ scale: 1.3 }}
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <span 
+                      className={`truncate text-sm transition-colors ${
+                        activeProjectId === project.id 
+                          ? "text-accent font-medium" 
+                          : "text-text-secondary group-hover:text-text-primary"
+                      }`}
+                    >
+                      {project.name}
+                    </span>
+                  </div>
+                  
+                  {hoveredProjectId === project.id && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectToEdit(project);
+                          setIsModalOpen(true);
+                        }}
+                        className="p-1 rounded text-text-muted hover:text-text-secondary hover:bg-border-subtle/50 transition-colors"
+                        title="Edit Project"
+                      >
+                        <Pen size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectToDelete(project);
+                          setIsDeleteOpen(true);
+                        }}
+                        className="p-1 rounded text-text-muted hover:text-status-red hover:bg-status-red/10 transition-colors"
+                        title="Delete Project"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </nav>
 
       {/* ─── Bottom Actions ──────────────────────────── */}
       <div className="px-3 py-3 border-t border-border-subtle">
-        <button className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-status-red/10 hover:text-status-red transition-colors">
+        <button 
+          onClick={lock}
+          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-status-red/10 hover:text-status-red transition-colors"
+        >
           <Lock size={16} />
           <span>Lock Vault</span>
         </button>
       </div>
+      {/* ─── Modals ────────────────────────────────────── */}
+      <ProjectModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        projectToEdit={projectToEdit}
+      />
+      
+      <ProjectDeleteConfirmation 
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        projectToDelete={projectToDelete}
+      />
     </aside>
   );
 }
