@@ -1,13 +1,31 @@
-import { useState, useMemo } from "react";
-import { Search, ExternalLink, Plus, Sparkles } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Search, ExternalLink, Plus, Sparkles, Lock } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { ProviderIcon } from "../components/ui/ProviderIcon";
 import { PROVIDERS } from "@vaultic/providers";
+import { useVaultStore } from "../stores/useVaultStore";
 
 export function FinderPage() {
   const [query, setQuery] = useState("");
-  const [searchesUsed] = useState(0);
+  const navigate = useNavigate();
+
+  const incrementSearchCount = useVaultStore((s) => s.incrementSearchCount);
+  const config = useVaultStore((s) => s.config);
+
   const maxSearches = 5;
+  const searchesUsed = config?.finderSearchDate === new Date().toISOString().split("T")[0] 
+                        ? (config.finderSearchCount || 0) 
+                        : 0;
+
+  // Rate limiting debounce tracker
+  useEffect(() => {
+    if (!query.trim()) return;
+    const timeout = setTimeout(() => {
+      incrementSearchCount();
+    }, 800);
+    return () => clearTimeout(timeout);
+  }, [query, incrementSearchCount]);
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -21,6 +39,7 @@ export function FinderPage() {
   }, [query]);
 
   const showResults = query.trim().length > 0;
+  const isLocked = searchesUsed >= maxSearches;
 
   return (
     <div className="flex flex-col h-full">
@@ -74,7 +93,7 @@ export function FinderPage() {
           </div>
 
           <p className="text-xs text-text-muted text-center">
-            {maxSearches - searchesUsed} searches remaining today ·{" "}
+            {Math.max(0, maxSearches - searchesUsed)} searches remaining today ·{" "}
             <span className="text-accent cursor-pointer hover:text-accent-hover transition-colors">
               Upgrade for unlimited
             </span>
@@ -85,8 +104,23 @@ export function FinderPage() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="space-y-3 mt-4"
+              className="space-y-3 mt-4 relative"
             >
+              {isLocked && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center pt-24 bg-card/60 backdrop-blur-[2px] rounded-xl border border-border-subtle">
+                  <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mb-4">
+                    <Lock size={28} className="text-accent" />
+                  </div>
+                  <h3 className="text-xl font-bold text-text-primary mb-2">Daily Limit Reached</h3>
+                  <p className="text-sm text-text-secondary text-center max-w-md px-4">
+                    You've hit the maximum 5 searches per day on the free tier. 
+                    Upgrade to Premium for unlimited API directory access.
+                  </p>
+                  <button className="mt-6 px-6 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent-hover shadow-glow">
+                    Upgrade to Premium
+                  </button>
+                </div>
+              )}
               <p className="text-xs text-text-muted">
                 {results.length} {results.length === 1 ? "result" : "results"} found
               </p>
@@ -134,7 +168,11 @@ export function FinderPage() {
                         <ExternalLink size={11} />
                         Sign Up
                       </a>
-                      <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border-subtle text-text-muted text-xs hover:text-text-secondary hover:border-border-active transition-colors">
+                      <button 
+                        onClick={() => !isLocked && navigate('/vault', { state: { draftProvider: provider.id } })}
+                        disabled={isLocked}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border-subtle text-text-muted text-xs hover:text-text-secondary hover:border-border-active transition-colors disabled:opacity-50"
+                      >
                         <Plus size={11} />
                         Add to Vault
                       </button>

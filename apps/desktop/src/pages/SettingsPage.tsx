@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useVaultStore } from "../stores/useVaultStore";
 import {
   Shield,
   Upload,
@@ -64,8 +65,18 @@ function SettingRow({
 }
 
 export function SettingsPage() {
-  const [autoLock] = useState(15);
-  const [clipboardClear] = useState(30);
+  const config = useVaultStore((s) => s.config);
+  const updateConfig = useVaultStore((s) => s.updateConfig);
+
+  const autoLock = config?.autoLockMinutes ?? 15;
+  const clipboardClear = config?.clipboardClearSeconds ?? 30;
+
+  const handleAutoLockCycle = () => {
+    const options = [0, 5, 15, 30, 60];
+    const currentIndex = options.indexOf(autoLock);
+    const nextVal = options[(currentIndex + 1) % options.length];
+    updateConfig({ autoLockMinutes: nextVal });
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -93,7 +104,9 @@ export function SettingsPage() {
                 icon={<Clock size={16} className="text-accent" />}
                 label="Auto-lock timeout"
                 description="Lock the vault after inactivity"
-                value={`${autoLock} min`}
+                value={autoLock === 0 ? "Never" : `${autoLock} min`}
+                action="Change"
+                onAction={handleAutoLockCycle}
               />
               <SettingRow
                 icon={<Clipboard size={16} className="text-accent" />}

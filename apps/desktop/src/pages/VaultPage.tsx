@@ -1,15 +1,17 @@
-import { useState, useMemo } from "react";
-import { Search, Plus, Filter, SlidersHorizontal, X } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Search, Plus, Filter, SlidersHorizontal, X, Upload, Download } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { KeyCard } from "../components/vault/KeyCard";
 import { AddKeyForm } from "../components/vault/AddKeyForm";
 import { DrawerOverlay } from "../components/ui/DrawerOverlay";
+import { EnvImportModal, type ImportKeyData } from "../components/vault/EnvImportModal";
 import { ToastContainer } from "../components/ui/Toast";
 import { useToast } from "../hooks/useToast";
-import type { ApiCategory, ApiTier } from "@vaultic/types";
 
 import { useVaultStore } from "../stores/useVaultStore";
 import { getDaysUntil } from "../utils/date";
+import { generateEnvContent } from "../utils/envParser";
 
 const FILTER_CATEGORIES: { value: string; label: string }[] = [
   { value: "all", label: "All" },
@@ -27,10 +29,27 @@ const FILTER_CATEGORIES: { value: string; label: string }[] = [
 export function VaultPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTier, setActiveTier] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const { toasts, dismissToast, success, info } = useToast();
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (location.state?.draftProvider) {
+      setIsDrawerOpen(true);
+    }
+  }, [location.state?.draftProvider]);
+
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+    if (location.state?.draftProvider) {
+      navigate("/vault", { replace: true, state: {} });
+    }
+  };
 
   const keys = useVaultStore((s) => s.keys);
   const projects = useVaultStore((s) => s.projects);
@@ -96,7 +115,7 @@ export function VaultPage() {
       await addKey({
         ...data,
       });
-      setIsDrawerOpen(false);
+      handleCloseDrawer();
       success("Key saved", "Encrypted with AES-256-GCM and stored locally");
     } catch {
       // handled by store/toast later if needed
@@ -106,6 +125,67 @@ export function VaultPage() {
   const handleDelete = async (id: string) => {
     await deleteKey(id);
     info("Key deleted", "Key has been removed from your vault");
+  };
+
+  const handleBatchImport = async (importedKeys: ImportKeyData[]) => {
+    try {
+      // Import them all sequentially
+      for (const k of importedKeys) {
+        await addKey({
+          name: k.name,
+          keyValue: k.keyValue,
+          provider: k.provider,
+          category: k.category,
+          projectId: k.projectId || "", // addKey requires string not null, we handle empty string safely
+          tier: "free",
+          expiryDate: "",
+          dashboardUrl: "",
+          notes: "",
+        });
+      }
+      success("Import successful", `${importedKeys.length} keys saved securely`);
+    } catch {
+      // handled by store if needed
+    }
+  };
+
+  const handleExportProject = async () => {
+    if (!activeProjectId) return;
+    const project = projects.find((p) => p.id === activeProjectId);
+    if (!project) return;
+
+    try {
+      const projectKeys = keys.filter((k) => k.projectId === activeProjectId);
+      if (projectKeys.length === 0) {
+        info("Nothing to export", "This project has no keys");
+        return;
+      }
+
+      // Decrypt all keys for this project
+      const decryptedPairs = await Promise.all(
+        projectKeys.map(async (k) => {
+          const pt = await decryptKey(k.id);
+          return { key: k.name, value: pt || "" };
+        })
+      );
+
+      const envString = generateEnvContent(decryptedPairs);
+
+      // Create browser download
+      const blob = new Blob([envString], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project.name.toLowerCase().replace(/\s+/g, "_")}.env`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      success("Export successful", "Your .env file has been downloaded");
+    } catch {
+      info("Export failed", "Could not decrypt keys for export");
+    }
   };
 
   const hasActiveFilters = activeCategory !== "all" || activeTier !== "all";
@@ -129,15 +209,26 @@ export function VaultPage() {
             )}
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setIsDrawerOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors shadow-glow"
-        >
-          <Plus size={16} />
-          <span>Add Key</span>
-        </motion.button>
+        <div className="flex items-center gap-2">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border-subtle text-text-primary text-sm font-medium hover:bg-border-subtle/50 transition-colors"
+          >
+            <Upload size={16} />
+            <span>Import</span>
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors shadow-glow"
+          >
+            <Plus size={16} />
+            <span>Add Key</span>
+          </motion.button>
+        </div>
       </header>
 
       {/* ─── Search & Filters ────────────────────────── */}
@@ -187,6 +278,16 @@ export function VaultPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
             )}
           </button>
+          {activeProjectId && (
+            <button
+              onClick={handleExportProject}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border-subtle text-text-secondary text-sm hover:bg-card hover:text-text-primary transition-colors ml-auto"
+              title="Export project keys to .env file"
+            >
+              <Download size={14} />
+              <span>Export .env</span>
+            </button>
+          )}
         </div>
 
         {/* Filter Chips */}
@@ -308,16 +409,25 @@ export function VaultPage() {
       {/* ─── Add Key Drawer ──────────────────────────── */}
       <DrawerOverlay
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={handleCloseDrawer}
         title="Add New Key"
         subtitle="Encrypted with zero-knowledge AES-256-GCM"
       >
         <AddKeyForm
           onSubmit={handleAddKey}
-          onCancel={() => setIsDrawerOpen(false)}
+          onCancel={handleCloseDrawer}
           projects={projects}
+          initialProvider={location.state?.draftProvider}
         />
       </DrawerOverlay>
+
+      {/* ─── Import Env Modal ─────────────────────────── */}
+      <EnvImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleBatchImport}
+        projects={projects}
+      />
 
       {/* ─── Toast Notifications ─────────────────────── */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

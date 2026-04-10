@@ -15,6 +15,10 @@ export interface VaultConfig {
   clipboardClearSeconds: number;
   /** Whether the vault has been initialized with a master password */
   vaultInitialized: boolean;
+  /** Number of searches performed in the API finder today */
+  finderSearchCount?: number;
+  /** ISO Date string of the last search to dictate daily resets */
+  finderSearchDate?: string;
 }
 
 // ─── Vault State ────────────────────────────────────────────────

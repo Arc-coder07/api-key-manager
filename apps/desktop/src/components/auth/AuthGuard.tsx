@@ -14,6 +14,36 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     initialize();
   }, [initialize]);
 
+  // Global Activity Tracking & Auto-Lock Interval
+  useEffect(() => {
+    if (!isUnlocked) return;
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const handleActivity = () => {
+      if (timeout) return;
+      timeout = setTimeout(() => {
+        useVaultStore.getState().touchActivity();
+        timeout = null;
+      }, 1000);
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("pointerdown", handleActivity);
+
+    const interval = setInterval(() => {
+      useVaultStore.getState().checkAutoLock();
+    }, 15000); // Check every 15 seconds
+
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("pointerdown", handleActivity);
+      if (timeout) clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [isUnlocked]);
+
   // Initial loading state while reading from LocalForage
   if (isLoading && !isInitialized && !isUnlocked) {
     return (

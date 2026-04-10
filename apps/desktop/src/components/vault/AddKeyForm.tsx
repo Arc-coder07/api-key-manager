@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Eye, EyeOff, Calendar, Link, FileText } from "lucide-react";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ProviderIcon } from "../ui/ProviderIcon";
@@ -22,9 +22,10 @@ interface AddKeyFormProps {
   onSubmit: (data: AddKeyFormData) => void;
   onCancel: () => void;
   projects: { id: string; name: string; color: string }[];
+  initialProvider?: string;
 }
 
-export function AddKeyForm({ onSubmit, onCancel, projects }: AddKeyFormProps) {
+export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: AddKeyFormProps) {
   const [form, setForm] = useState<AddKeyFormData>({
     name: "",
     keyValue: "",
@@ -64,7 +65,7 @@ export function AddKeyForm({ onSubmit, onCancel, projects }: AddKeyFormProps) {
     })),
   ];
 
-  const handleProviderChange = (providerId: string) => {
+  const handleProviderChange = useCallback((providerId: string) => {
     const provider = PROVIDERS.find((p) => p.id === providerId);
     setForm((prev) => ({
       ...prev,
@@ -73,7 +74,13 @@ export function AddKeyForm({ onSubmit, onCancel, projects }: AddKeyFormProps) {
       dashboardUrl: provider?.dashboardUrl ?? prev.dashboardUrl,
       name: prev.name || (provider ? `${provider.name} API Key` : ""),
     }));
-  };
+  }, []);
+
+  useEffect(() => {
+    if (initialProvider) {
+      handleProviderChange(initialProvider);
+    }
+  }, [initialProvider, handleProviderChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

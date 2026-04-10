@@ -118,6 +118,12 @@ interface VaultStoreState {
 
   /** Set the active project for filtering in the Vault */
   setActiveProject: (projectId: string | null) => void;
+
+  /** Update configurable vault settings safely */
+  updateConfig: (updates: Partial<VaultConfig>) => Promise<void>;
+
+  /** Increment the finder search count for today, resetting if a new day. */
+  incrementSearchCount: () => Promise<number>;
 }
 
 // ─── Store Implementation ───────────────────────────────────────
@@ -374,7 +380,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
     const updatedProjects = [...projects];
     updatedProjects[index] = updatedProject;
-    
+
     await projectsStore.setItem("projects", updatedProjects);
     set({ projects: updatedProjects });
   },
@@ -382,15 +388,15 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   // ── deleteProject ──────────────────────────────
   deleteProject: async (id: string, cascadeStrategy: "orphan" | "delete" | "reassign", reassignProjectId?: string) => {
     const { projects, keys } = get();
-    
+
     const updatedProjects = projects.filter((p) => p.id !== id);
     await projectsStore.setItem("projects", updatedProjects);
-    
+
     let updatedKeys = [...keys];
     let keysChanged = false;
 
     if (cascadeStrategy === "orphan") {
-      updatedKeys = updatedKeys.map((k) => 
+      updatedKeys = updatedKeys.map((k) =>
         k.projectId === id ? { ...k, projectId: null, updatedAt: new Date().toISOString() } : k
       );
       keysChanged = true;
@@ -399,7 +405,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       keysChanged = true;
     } else if (cascadeStrategy === "reassign") {
       if (!reassignProjectId) throw new Error("reassignProjectId is required when using reassign strategy");
-      updatedKeys = updatedKeys.map((k) => 
+      updatedKeys = updatedKeys.map((k) =>
         k.projectId === id ? { ...k, projectId: reassignProjectId, updatedAt: new Date().toISOString() } : k
       );
       keysChanged = true;
@@ -421,7 +427,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   // ── checkAutoLock ──────────────────────────────
   checkAutoLock: () => {
     const { isUnlocked, lastActivity, config, lock } = get();
-    if (!isUnlocked || !config) return;
+    if (!isUnlocked || !config || config.autoLockMinutes === 0) return;
 
     const timeoutMs = config.autoLockMinutes * 60 * 1000;
     if (Date.now() - lastActivity > timeoutMs) {
@@ -432,5 +438,39 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   // ── setActiveProject ───────────────────────────
   setActiveProject: (projectId: string | null) => {
     set({ activeProjectId: projectId });
+  },
+
+  // ── incrementSearchCount ───────────────────────
+  incrementSearchCount: async () => {
+    const { config } = get();
+    if (!config) return 0;
+
+    // YYYY-MM-DD format
+    const today = new Date().toISOString().split("T")[0];
+    let newCount = (config.finderSearchCount || 0) + 1;
+
+    // Reset if it's a new day
+    if (config.finderSearchDate !== today) {
+      newCount = 1;
+    }
+
+    const newConfig = {
+      ...config,
+      finderSearchCount: newCount,
+      finderSearchDate: today,
+    };
+
+    await configStore.setItem("vault_config", newConfig);
+    set({ config: newConfig });
+    return newCount;
+  },
+
+  // ── updateConfig ───────────────────────────────────
+  updateConfig: async (updates: Partial<VaultConfig>) => {
+    const { config } = get();
+    if (!config) return;
+    const newConfig = { ...config, ...updates };
+    await configStore.setItem("vault_config", newConfig);
+    set({ config: newConfig });
   },
 }));
