@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -22,12 +22,14 @@ const navItems = [
 import { useVaultStore } from "../../stores/useVaultStore";
 import { ProjectModal } from "../projects/ProjectModal";
 import { ProjectDeleteConfirmation } from "../projects/ProjectDeleteConfirmation";
+import { getDaysUntil } from "../../utils/date";
 import type { Project } from "@vaultic/types";
 import { Layers } from "lucide-react";
 
 export function Sidebar() {
   const location = useLocation();
   const lock = useVaultStore((s) => s.lock);
+  const keys = useVaultStore((s) => s.keys);
   const projects = useVaultStore((s) => s.projects);
   const activeProjectId = useVaultStore((s) => s.activeProjectId);
   const setActiveProject = useVaultStore((s) => s.setActiveProject);
@@ -39,6 +41,13 @@ export function Sidebar() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
+
+  const expiringCount = useMemo(() => {
+    return keys.filter((k) => {
+      const days = getDaysUntil(k.expiryDate);
+      return days !== null && days <= 30;
+    }).length;
+  }, [keys]);
 
   return (
     <aside className="flex flex-col w-60 h-screen bg-sidebar border-r border-border-subtle shrink-0 no-select">
@@ -91,9 +100,9 @@ export function Sidebar() {
               )}
               <Icon size={18} strokeWidth={isActive ? 2 : 1.5} />
               <span>{label}</span>
-              {to === "/expiring" && (
+              {to === "/expiring" && expiringCount > 0 && (
                 <span className="ml-auto px-1.5 py-0.5 rounded text-xxs bg-status-amber/15 text-status-amber font-medium">
-                  4
+                  {expiringCount}
                 </span>
               )}
             </NavLink>

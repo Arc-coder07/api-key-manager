@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useVaultStore } from "../stores/useVaultStore";
+import { ChangePasswordModal } from "../components/vault/ChangePasswordModal";
 import {
   Shield,
   Upload,
@@ -65,17 +67,31 @@ function SettingRow({
 }
 
 export function SettingsPage() {
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const navigate = useNavigate();
+
   const config = useVaultStore((s) => s.config);
   const updateConfig = useVaultStore((s) => s.updateConfig);
+  const isMigrating = useVaultStore((s) => s.isMigrating);
+  const migrationProgress = useVaultStore((s) => s.migrationProgress);
 
   const autoLock = config?.autoLockMinutes ?? 15;
   const clipboardClear = config?.clipboardClearSeconds ?? 30;
 
   const handleAutoLockCycle = () => {
+    if (isMigrating) return;
     const options = [0, 5, 15, 30, 60];
     const currentIndex = options.indexOf(autoLock);
     const nextVal = options[(currentIndex + 1) % options.length];
     updateConfig({ autoLockMinutes: nextVal });
+  };
+
+  const handleClipboardCycle = () => {
+    if (isMigrating) return;
+    const options = [10, 30, 60, 120];
+    const currentIndex = options.indexOf(clipboardClear);
+    const nextVal = options[(currentIndex + 1) % options.length];
+    updateConfig({ clipboardClearSeconds: nextVal });
   };
 
   return (
@@ -87,11 +103,48 @@ export function SettingsPage() {
         </p>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-8 py-6 relative">
+        {/* Migration Lock Overlay */}
+        <AnimatePresence>
+          {isMigrating && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 flex items-center justify-center bg-app/60 backdrop-blur-sm"
+            >
+              <div className="bg-card border border-accent/20 p-8 rounded-2xl max-w-sm w-full shadow-2xl text-center">
+                <Lock size={32} className="text-accent mx-auto mb-4 animate-pulse" />
+                <h3 className="text-lg font-bold text-text-primary mb-2">Re-Encrypting Data</h3>
+                <p className="text-sm text-text-secondary mb-6">
+                  Applying new security envelope. Please do not close the application.
+                </p>
+                {migrationProgress && (
+                  <div className="w-full bg-border-subtle rounded-full h-2 overflow-hidden mb-2">
+                    <motion.div
+                      className="bg-accent h-full rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${migrationProgress.total > 0 ? (migrationProgress.current / migrationProgress.total) * 100 : 0}%` }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-text-muted font-mono">
+                  {migrationProgress
+                    ? `Processing ${migrationProgress.current} / ${migrationProgress.total} keys`
+                    : "Initializing sequence..."}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-8 max-w-2xl"
+          className={`space-y-8 max-w-2xl transition-all duration-300 ${
+            isMigrating ? "blur-[2px] opacity-40 pointer-events-none select-none" : ""
+          }`}
         >
           {/* ─── Security Section ──────────────────────── */}
           <section className="space-y-3">
@@ -113,12 +166,15 @@ export function SettingsPage() {
                 label="Clipboard auto-clear"
                 description="Clear clipboard after copying a key"
                 value={`${clipboardClear}s`}
+                action="Change"
+                onAction={handleClipboardCycle}
               />
               <SettingRow
                 icon={<Lock size={16} className="text-accent" />}
                 label="Change master password"
                 description="Update your vault encryption password"
                 action="Change"
+                onAction={() => setIsChangingPassword(true)}
               />
             </div>
           </section>
@@ -135,12 +191,14 @@ export function SettingsPage() {
                 label="Import from .env"
                 description="Parse and import keys from an environment file"
                 action="Import"
+                onAction={() => navigate("/vault", { state: { openImport: true } })}
               />
               <SettingRow
                 icon={<FileDown size={16} className="text-accent" />}
                 label="Export keys"
                 description="Export project keys as .env or JSON"
                 action="Export"
+                onAction={() => navigate("/vault")}
               />
             </div>
           </section>
@@ -179,7 +237,7 @@ export function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-text-primary">Vaultic</p>
-                  <p className="text-xs text-text-muted">v0.1.0 · Phase 1</p>
+                  <p className="text-xs text-text-muted">v0.1.0 · Phase 8</p>
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
@@ -191,6 +249,11 @@ export function SettingsPage() {
           </section>
         </motion.div>
       </div>
+
+      {/* Change Password Modal */}
+      {isChangingPassword && (
+        <ChangePasswordModal onClose={() => setIsChangingPassword(false)} />
+      )}
     </div>
   );
 }

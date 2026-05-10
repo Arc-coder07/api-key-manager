@@ -87,44 +87,12 @@ export async function deriveKey(
   return derivedKey;
 }
 
-// ─── Verification Hash ──────────────────────────────────────────
-
-/**
- * Generate a verification hash from the derived key.
- * Used to check if the user entered the correct master password
- * without storing the password itself.
- *
- * @param derivedKey       - The CryptoKey from deriveKey()
- * @param verificationSalt - A separate salt for the verification hash
- * @returns Base64-encoded SHA-256 hash
- */
-export async function generateVerificationHash(
-  derivedKey: CryptoKey,
-  verificationSalt: string
-): Promise<string> {
-  // Export the key material for hashing (transient operation)
-  const keyData = await crypto.subtle.exportKey('raw', await reImportForExport(derivedKey));
-  const saltBuffer = base64ToArrayBuffer(verificationSalt);
-
-  // Concatenate key data + verification salt
-  const combined = new Uint8Array(keyData.byteLength + saltBuffer.byteLength);
-  combined.set(new Uint8Array(keyData), 0);
-  combined.set(new Uint8Array(saltBuffer), keyData.byteLength);
-
-  // Hash the combined data
-  const hash = await crypto.subtle.digest('SHA-256', combined);
-  return arrayBufferToBase64(hash);
-}
-
-/**
- * Internal: Re-import a non-extractable key as extractable for verification.
- * This is a one-time operation during setup/unlock only.
- */
-async function reImportForExport(key: CryptoKey): Promise<CryptoKey> {
-  // We need a separate derivation that IS extractable for verification
-  // This is a workaround — we'll use a different approach
-  return key;
-}
+// ─── Verification ───────────────────────────────────────────────
+// Note: Verification hashing is performed inline within setupVault()
+// and verifyAndDeriveKey() using extractable key derivations. There
+// is no standalone generateVerificationHash() function because the
+// Web Crypto API does not allow re-importing a non-extractable key
+// as extractable after the fact.
 
 /**
  * Derive and verify password in one step.

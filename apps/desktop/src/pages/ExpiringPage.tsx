@@ -56,16 +56,19 @@ export function ExpiringPage() {
   const projects = useVaultStore((s) => s.projects);
   const decryptKey = useVaultStore((s) => s.decryptKey);
   const deleteKey = useVaultStore((s) => s.deleteKey);
+  const config = useVaultStore((s) => s.config);
   const { toasts, dismissToast, success, info } = useToast();
+
+  const clipboardClearMs = (config?.clipboardClearSeconds ?? 30) * 1000;
 
   const handleCopy = async (id: string) => {
     const plaintext = await decryptKey(id);
     if (plaintext) {
       await navigator.clipboard.writeText(plaintext);
-      success("Copied to clipboard", "Key will be cleared in 30 seconds");
+      success("Copied to clipboard", `Key will be cleared in ${config?.clipboardClearSeconds ?? 30} seconds`);
       setTimeout(() => {
         navigator.clipboard.writeText("");
-      }, 30000);
+      }, clipboardClearMs);
     }
   };
 

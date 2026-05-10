@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { X, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { parseEnvContent, ParsedEnvItem } from "../../utils/envParser";
@@ -33,8 +33,8 @@ export function EnvImportModal({ isOpen, onClose, onImport, projects }: EnvImpor
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset state when modal is opened/closed
-  useMemo(() => {
+  // Reset state when modal closes
+  useEffect(() => {
     if (!isOpen) {
       setStep(1);
       setRawEnv("");
@@ -79,10 +79,13 @@ export function EnvImportModal({ isOpen, onClose, onImport, projects }: EnvImpor
   };
 
   const handleRemoveItem = (itemId: string) => {
-    setPreviewItems((prev) => prev.filter((item) => item.id !== itemId));
-    if (previewItems.length <= 1) {
-      setStep(1);
-    }
+    setPreviewItems((prev) => {
+      const updated = prev.filter((item) => item.id !== itemId);
+      if (updated.length === 0) {
+        setStep(1);
+      }
+      return updated;
+    });
   };
 
   const handleSubmit = async () => {

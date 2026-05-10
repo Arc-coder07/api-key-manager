@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, AlertTriangle, ArrowRight } from "lucide-react";
 import { useVaultStore } from "../../stores/useVaultStore";
@@ -35,7 +35,7 @@ export function ProjectDeleteConfirmation({
   }, [projects, projectToDelete]);
 
   // Reset state when modal opens
-  useMemo(() => {
+  useEffect(() => {
     if (isOpen) {
       setStrategy("orphan");
       if (availableProjects.length > 0) {

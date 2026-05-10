@@ -9,7 +9,7 @@ import { EnvImportModal, type ImportKeyData } from "../components/vault/EnvImpor
 import { ToastContainer } from "../components/ui/Toast";
 import { useToast } from "../hooks/useToast";
 
-import { useVaultStore } from "../stores/useVaultStore";
+import { useVaultStore, type NewKeyInput } from "../stores/useVaultStore";
 import { getDaysUntil } from "../utils/date";
 import { generateEnvContent } from "../utils/envParser";
 
@@ -42,7 +42,11 @@ export function VaultPage() {
     if (location.state?.draftProvider) {
       setIsDrawerOpen(true);
     }
-  }, [location.state?.draftProvider]);
+    if (location.state?.openImport) {
+      setIsImportOpen(true);
+      navigate("/vault", { replace: true, state: {} });
+    }
+  }, [location.state?.draftProvider, location.state?.openImport, navigate]);
 
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
@@ -57,6 +61,9 @@ export function VaultPage() {
   const deleteKey = useVaultStore((s) => s.deleteKey);
   const decryptKey = useVaultStore((s) => s.decryptKey);
   const activeProjectId = useVaultStore((s) => s.activeProjectId);
+  const config = useVaultStore((s) => s.config);
+
+  const clipboardClearMs = (config?.clipboardClearSeconds ?? 30) * 1000;
 
   // Filtered keys
   const filteredKeys = useMemo(() => {
@@ -99,10 +106,10 @@ export function VaultPage() {
     const plaintext = await decryptKey(id);
     if (plaintext) {
       await navigator.clipboard.writeText(plaintext);
-      success("Copied to clipboard", "Key will be cleared in 30 seconds");
+      success("Copied to clipboard", `Key will be cleared in ${config?.clipboardClearSeconds ?? 30} seconds`);
       setTimeout(() => {
         navigator.clipboard.writeText("");
-      }, 30000);
+      }, clipboardClearMs);
     }
   };
 
@@ -110,7 +117,7 @@ export function VaultPage() {
     return await decryptKey(id);
   };
 
-  const handleAddKey = async (data: any) => {
+  const handleAddKey = async (data: NewKeyInput) => {
     try {
       await addKey({
         ...data,

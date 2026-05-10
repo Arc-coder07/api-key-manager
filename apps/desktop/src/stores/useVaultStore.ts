@@ -61,6 +61,8 @@ interface VaultStoreState {
   isInitialized: boolean; // Has the user ever set a master password?
   isUnlocked: boolean;    // Is the vault currently accessible?
   isLoading: boolean;     // Is an async operation in progress?
+  isMigrating: boolean;   // Is a master-password re-encryption running?
+  migrationProgress: { current: number; total: number } | null;
   error: string | null;   // Last error message
 
   // ── Security (RAM only — NEVER persisted) ──────
@@ -122,6 +124,9 @@ interface VaultStoreState {
   /** Update configurable vault settings safely */
   updateConfig: (updates: Partial<VaultConfig>) => Promise<void>;
 
+  /** Change master password — full re-encryption of all keys */
+  changeMasterPassword: (currentPass: string, newPass: string) => Promise<boolean>;
+
   /** Increment the finder search count for today, resetting if a new day. */
   incrementSearchCount: () => Promise<number>;
 }
@@ -133,6 +138,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   isInitialized: false,
   isUnlocked: false,
   isLoading: true,
+  isMigrating: false,
+  migrationProgress: null,
   error: null,
   derivedKey: null,
   lastActivity: Date.now(),
@@ -254,8 +261,9 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
   // ── addKey ─────────────────────────────────────
   addKey: async (input: NewKeyInput) => {
-    const { derivedKey, keys } = get();
+    const { derivedKey, keys, isMigrating } = get();
     if (!derivedKey) throw new Error("Vault is locked");
+    if (isMigrating) throw new Error("Cannot modify vault during migration");
 
     // Encrypt the plaintext key value
     const { ciphertext, iv } = await encrypt(input.keyValue, derivedKey);
@@ -283,8 +291,9 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
   // ── updateKey ──────────────────────────────────
   updateKey: async (id: string, updates: Partial<NewKeyInput>) => {
-    const { derivedKey, keys } = get();
+    const { derivedKey, keys, isMigrating } = get();
     if (!derivedKey) throw new Error("Vault is locked");
+    if (isMigrating) throw new Error("Cannot modify vault during migration");
 
     const keyIndex = keys.findIndex((k) => k.id === id);
     if (keyIndex === -1) throw new Error("Key not found");
@@ -320,7 +329,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
   // ── deleteKey ──────────────────────────────────
   deleteKey: async (id: string) => {
-    const { keys } = get();
+    const { keys, isMigrating } = get();
+    if (isMigrating) throw new Error("Cannot modify vault during migration");
     const updatedKeys = keys.filter((k) => k.id !== id);
     await keysStore.setItem("keys", updatedKeys);
     set({ keys: updatedKeys });
@@ -472,5 +482,99 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const newConfig = { ...config, ...updates };
     await configStore.setItem("vault_config", newConfig);
     set({ config: newConfig });
+  },
+
+  // ── changeMasterPassword ──────────────────────────
+  // Full re-encryption: decrypt every key with old derivedKey,
+  // generate fresh security envelope, re-encrypt all keys.
+  // Atomic: on failure, nothing is committed — old password stays valid.
+  changeMasterPassword: async (currentPass: string, newPass: string) => {
+    const { config, derivedKey, keys } = get();
+    if (!config || !derivedKey) {
+      set({ error: "Vault must be unlocked to change password" });
+      return false;
+    }
+
+    set({ isMigrating: true, error: null, migrationProgress: { current: 0, total: keys.length } });
+
+    try {
+      // 1. Verify current password
+      const verifiedKey = await verifyAndDeriveKey(
+        currentPass,
+        config.salt,
+        config.verificationSalt,
+        config.verificationHash
+      );
+      if (!verifiedKey) {
+        set({ isMigrating: false, migrationProgress: null, error: "Incorrect current password" });
+        return false;
+      }
+
+      // 2. Generate fresh security envelope from new password
+      const newEnvelope = await setupVault(newPass);
+
+      // 3. Re-encrypt every key: decrypt with old key → encrypt with new key
+      const totalKeys = keys.length;
+      const reEncryptedKeys: ApiKeyEntry[] = [];
+
+      for (let i = 0; i < totalKeys; i++) {
+        const k = keys[i];
+        try {
+          const plaintext = await decrypt(k.encrypted.ciphertext, k.encrypted.iv, derivedKey);
+          const newEncrypted = await encrypt(plaintext, newEnvelope.derivedKey);
+          reEncryptedKeys.push({
+            ...k,
+            encrypted: newEncrypted,
+            updatedAt: new Date().toISOString(),
+          });
+
+          // Yield to UI for progress updates every 5 keys
+          if (i % 5 === 0) {
+            set({ migrationProgress: { current: i + 1, total: totalKeys } });
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        } catch (err) {
+          console.error("Migration error on key:", k.id, err);
+          throw new Error("MIGRATION_HALT_REVERT");
+        }
+      }
+
+      // 4. Parity check — must have re-encrypted every single key
+      if (reEncryptedKeys.length !== totalKeys) {
+        throw new Error("MIGRATION_HALT_REVERT");
+      }
+
+      set({ migrationProgress: { current: totalKeys, total: totalKeys } });
+
+      // 5. Atomic commit to LocalForage
+      const newConfig: VaultConfig = {
+        ...config,
+        salt: newEnvelope.salt,
+        verificationSalt: newEnvelope.verificationSalt,
+        verificationHash: newEnvelope.verificationHash,
+      };
+
+      await configStore.setItem("vault_config", newConfig);
+      await keysStore.setItem("keys", reEncryptedKeys);
+
+      // 6. Hot-swap in-memory state
+      set({
+        config: newConfig,
+        derivedKey: newEnvelope.derivedKey,
+        keys: reEncryptedKeys,
+        isMigrating: false,
+        migrationProgress: null,
+      });
+
+      return true;
+    } catch {
+      // On any failure, old password + old keys remain untouched
+      set({
+        isMigrating: false,
+        migrationProgress: null,
+        error: "Migration failed. Your old password is still active.",
+      });
+      return false;
+    }
   },
 }));
