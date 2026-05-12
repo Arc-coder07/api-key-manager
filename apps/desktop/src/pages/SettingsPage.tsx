@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useVaultStore } from "../stores/useVaultStore";
 import { ChangePasswordModal } from "../components/vault/ChangePasswordModal";
+import { ToastContainer } from "../components/ui/Toast";
+import { useToast } from "../hooks/useToast";
 import {
   Shield,
   Upload,
@@ -69,6 +71,7 @@ function SettingRow({
 export function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const navigate = useNavigate();
+  const { toasts, dismissToast } = useToast();
 
   const config = useVaultStore((s) => s.config);
   const updateConfig = useVaultStore((s) => s.updateConfig);
@@ -198,7 +201,7 @@ export function SettingsPage() {
                 label="Export keys"
                 description="Export project keys as .env or JSON"
                 action="Export"
-                onAction={() => navigate("/vault")}
+                onAction={() => navigate("/vault", { state: { openExport: true } })}
               />
             </div>
           </section>
@@ -254,6 +257,8 @@ export function SettingsPage() {
       {isChangingPassword && (
         <ChangePasswordModal onClose={() => setIsChangingPassword(false)} />
       )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

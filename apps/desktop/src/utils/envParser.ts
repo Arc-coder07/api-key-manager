@@ -45,9 +45,48 @@ export function parseEnvContent(content: string): ParsedEnvItem[] {
  */
 export function generateEnvContent(items: ParsedEnvItem[]): string {
   return items.map(item => {
+    // Sanitize key name for ENV format: uppercase, replace spaces/special chars with underscores
+    const safeKey = item.key
+      .toUpperCase()
+      .replace(/[^A-Z0-9_]/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/^_|_$/g, '');
+
     // If the value contains characters like spaces, it might be safer to quote it
     const needsQuotes = item.value.includes(' ') || item.value.includes('\n');
     const safeValue = needsQuotes ? `"${item.value}"` : item.value;
-    return `${item.key}=${safeValue}`;
+    return `${safeKey}=${safeValue}`;
   }).join('\n');
+}
+
+/**
+ * Metadata-only export item (no secrets).
+ */
+export interface MetadataExportItem {
+  name: string;
+  provider: string;
+  category: string;
+  notes: string;
+  projectName?: string;
+}
+
+/**
+ * Full export item (with decrypted value).
+ */
+export interface FullExportItem extends MetadataExportItem {
+  value: string;
+}
+
+/**
+ * Generates JSON string for full export (includes decrypted values).
+ */
+export function generateJsonFullExport(items: FullExportItem[]): string {
+  return JSON.stringify(items, null, 2);
+}
+
+/**
+ * Generates JSON string for metadata-only export (no secrets).
+ */
+export function generateJsonMetadataExport(items: MetadataExportItem[]): string {
+  return JSON.stringify(items, null, 2);
 }

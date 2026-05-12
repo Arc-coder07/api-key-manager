@@ -23,21 +23,75 @@ interface AddKeyFormProps {
   onCancel: () => void;
   projects: { id: string; name: string; color: string }[];
   initialProvider?: string;
+  /** Pre-select project (e.g. from active sidebar filter) */
+  initialProjectId?: string;
+  /** Called when user clicks "+ Create Project" inline */
+  onCreateProject?: () => void;
+  /** Edit mode: pre-fill all fields */
+  editData?: {
+    id: string;
+    name: string;
+    keyValue: string;
+    provider: string;
+    category: ApiCategory;
+    projectId: string;
+    tier: ApiTier;
+    expiryDate: string;
+    dashboardUrl: string;
+    notes: string;
+  } | null;
 }
 
-export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: AddKeyFormProps) {
-  const [form, setForm] = useState<AddKeyFormData>({
+function getInitialFormState(
+  initialProvider?: string,
+  initialProjectId?: string,
+  editData?: AddKeyFormProps["editData"]
+): AddKeyFormData {
+  if (editData) {
+    return {
+      name: editData.name,
+      keyValue: editData.keyValue,
+      provider: editData.provider,
+      category: editData.category,
+      projectId: editData.projectId,
+      tier: editData.tier,
+      expiryDate: editData.expiryDate,
+      dashboardUrl: editData.dashboardUrl,
+      notes: editData.notes,
+    };
+  }
+  return {
     name: "",
     keyValue: "",
-    provider: "",
+    provider: initialProvider || "",
     category: "other",
-    projectId: "",
+    projectId: initialProjectId || "",
     tier: "free",
     expiryDate: "",
     dashboardUrl: "",
     notes: "",
-  });
+  };
+}
+
+export function AddKeyForm({
+  onSubmit,
+  onCancel,
+  projects,
+  initialProvider,
+  initialProjectId,
+  onCreateProject,
+  editData,
+}: AddKeyFormProps) {
+  const [form, setForm] = useState<AddKeyFormData>(() =>
+    getInitialFormState(initialProvider, initialProjectId, editData)
+  );
   const [showKey, setShowKey] = useState(false);
+
+  // Reset form when editData or drawer open state changes
+  useEffect(() => {
+    setForm(getInitialFormState(initialProvider, initialProjectId, editData));
+    setShowKey(false);
+  }, [initialProvider, initialProjectId, editData]);
 
   const providerOptions = PROVIDERS.map((p) => ({
     value: p.id,
@@ -76,12 +130,6 @@ export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: Ad
     }));
   }, []);
 
-  useEffect(() => {
-    if (initialProvider) {
-      handleProviderChange(initialProvider);
-    }
-  }, [initialProvider, handleProviderChange]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.keyValue.trim()) return;
@@ -89,6 +137,7 @@ export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: Ad
   };
 
   const isValid = form.name.trim() && form.keyValue.trim();
+  const isEditMode = !!editData;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -188,6 +237,11 @@ export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: Ad
         value={form.projectId}
         onChange={(v) => setForm((prev) => ({ ...prev, projectId: v }))}
         placeholder="Assign to a project..."
+        inlineAction={
+          onCreateProject
+            ? { label: "Create Project", onClick: onCreateProject }
+            : undefined
+        }
       />
 
       {/* Expiry Date */}
@@ -258,7 +312,7 @@ export function AddKeyForm({ onSubmit, onCancel, projects, initialProvider }: Ad
             }
           `}
         >
-          Encrypt & Save
+          {isEditMode ? "Save Changes" : "Encrypt & Save"}
         </button>
       </div>
 

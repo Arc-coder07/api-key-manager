@@ -23,6 +23,7 @@ import type {
   ApiTier,
   Project,
   VaultConfig,
+  LinkedExport,
 } from "@vaultic/types";
 
 // ─── LocalForage stores ─────────────────────────────────────────
@@ -40,6 +41,11 @@ const keysStore = localforage.createInstance({
 const projectsStore = localforage.createInstance({
   name: "vaultic",
   storeName: "projects",
+});
+
+const linkedExportsStore = localforage.createInstance({
+  name: "vaultic",
+  storeName: "linked_exports",
 });
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -73,6 +79,7 @@ interface VaultStoreState {
   keys: ApiKeyEntry[];
   projects: Project[];
   config: VaultConfig | null;
+  linkedExports: LinkedExport[];
 
   // ── UI State ───────────────────────────────────
   activeProjectId: string | null;
@@ -129,6 +136,12 @@ interface VaultStoreState {
 
   /** Increment the finder search count for today, resetting if a new day. */
   incrementSearchCount: () => Promise<number>;
+
+  /** Linked Export CRUD */
+  addLinkedExport: (link: Omit<LinkedExport, 'id' | 'createdAt' | 'lastSynced'>) => Promise<LinkedExport>;
+  removeLinkedExport: (id: string) => Promise<void>;
+  updateLinkedExport: (id: string, updates: Partial<LinkedExport>) => Promise<void>;
+  getLinkedExportsForProject: (projectId: string | null) => LinkedExport[];
 }
 
 // ─── Store Implementation ───────────────────────────────────────
@@ -146,6 +159,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   keys: [],
   projects: [],
   config: null,
+  linkedExports: [],
   activeProjectId: null,
 
   // ── initialize ─────────────────────────────────
@@ -184,6 +198,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       // Load any existing keys/projects (should be empty on first setup)
       const keys = (await keysStore.getItem<ApiKeyEntry[]>("keys")) || [];
       const projects = (await projectsStore.getItem<Project[]>("projects")) || [];
+      const linkedExports = (await linkedExportsStore.getItem<LinkedExport[]>("linked_exports")) || [];
 
       set({
         isInitialized: true,
@@ -193,6 +208,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         lastActivity: Date.now(),
         config,
         keys,
+        linkedExports,
         projects,
       });
 
@@ -229,6 +245,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       // Load persisted data
       const keys = (await keysStore.getItem<ApiKeyEntry[]>("keys")) || [];
       const projects = (await projectsStore.getItem<Project[]>("projects")) || [];
+      const linkedExports = (await linkedExportsStore.getItem<LinkedExport[]>("linked_exports")) || [];
 
       set({
         isUnlocked: true,
@@ -237,6 +254,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         lastActivity: Date.now(),
         keys,
         projects,
+        linkedExports,
         error: null,
       });
 
@@ -255,6 +273,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       derivedKey: null,
       keys: [],
       projects: [],
+      linkedExports: [],
       error: null,
     });
   },
@@ -576,5 +595,41 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       });
       return false;
     }
+  },
+
+  // ── Linked Exports ─────────────────────────────
+
+  addLinkedExport: async (link) => {
+    const now = new Date().toISOString();
+    const newLink: LinkedExport = {
+      ...link,
+      id: uuidv4(),
+      createdAt: now,
+      lastSynced: now,
+    };
+    const updated = [...get().linkedExports, newLink];
+    await linkedExportsStore.setItem("linked_exports", updated);
+    set({ linkedExports: updated });
+    return newLink;
+  },
+
+  removeLinkedExport: async (id: string) => {
+    const updated = get().linkedExports.filter((l) => l.id !== id);
+    await linkedExportsStore.setItem("linked_exports", updated);
+    set({ linkedExports: updated });
+  },
+
+  updateLinkedExport: async (id: string, updates: Partial<LinkedExport>) => {
+    const links = get().linkedExports;
+    const idx = links.findIndex((l) => l.id === id);
+    if (idx === -1) return;
+    const updated = [...links];
+    updated[idx] = { ...updated[idx], ...updates };
+    await linkedExportsStore.setItem("linked_exports", updated);
+    set({ linkedExports: updated });
+  },
+
+  getLinkedExportsForProject: (projectId: string | null) => {
+    return get().linkedExports.filter((l) => l.projectId === projectId);
   },
 }));

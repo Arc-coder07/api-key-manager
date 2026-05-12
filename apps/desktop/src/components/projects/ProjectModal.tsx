@@ -26,6 +26,7 @@ const PROJECT_COLORS = [
 
 export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalProps) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [color, setColor] = useState(PROJECT_COLORS[0]);
   const addProject = useVaultStore((s) => s.addProject);
   const updateProject = useVaultStore((s) => s.updateProject);
@@ -35,9 +36,11 @@ export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalPro
     if (isOpen) {
       if (projectToEdit) {
         setName(projectToEdit.name);
+        setDescription(projectToEdit.description || "");
         setColor(projectToEdit.color || PROJECT_COLORS[0]);
       } else {
         setName("");
+        setDescription("");
         setColor(PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)]);
       }
     }
@@ -49,10 +52,10 @@ export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalPro
 
     try {
       if (projectToEdit) {
-        await updateProject(projectToEdit.id, { name: name.trim(), color });
+        await updateProject(projectToEdit.id, { name: name.trim(), description: description.trim(), color });
         success("Project updated", `Your changes to ${name} have been saved.`);
       } else {
-        await addProject(name.trim(), "", color);
+        await addProject(name.trim(), description.trim(), color);
         success("Project created", `Project ${name} has been added to your vault.`);
       }
       onClose();
@@ -107,6 +110,19 @@ export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalPro
                       className="w-full px-3 py-2 bg-app border border-border-subtle rounded-lg text-sm text-text-primary focus:border-accent focus:outline-none transition-colors"
                       required
                       autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                      Description <span className="text-text-muted font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Brief project description..."
+                      className="w-full px-3 py-2 bg-app border border-border-subtle rounded-lg text-sm text-text-primary focus:border-accent focus:outline-none transition-colors"
                     />
                   </div>
 

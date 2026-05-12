@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2 } from "lucide-react";
+import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2, Pen } from "lucide-react";
 import { ProviderIcon } from "../ui/ProviderIcon";
 
 interface KeyCardProps {
@@ -19,6 +19,7 @@ interface KeyCardProps {
   onReveal?: (id: string) => Promise<string | null>;
   onClick?: (id: string) => void;
   onDelete?: (id: string) => void;
+  onEdit?: (id: string) => void;
 }
 
 const tierStyles: Record<string, { bg: string; text: string }> = {
@@ -51,6 +52,7 @@ export function KeyCard({
   onReveal,
   onClick,
   onDelete,
+  onEdit,
 }: KeyCardProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
@@ -60,6 +62,19 @@ export function KeyCard({
 
   const badgeStyle = tierStyles[tier] ?? tierStyles.free;
   const expiryStyle = getExpiryStyle(expiryDays);
+
+  // Close menu on scroll or window resize
+  useEffect(() => {
+    if (!showMenu) return;
+
+    const closeMenu = () => setShowMenu(false);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [showMenu]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -80,7 +95,6 @@ export function KeyCard({
         if (plaintext) {
           setRevealedKey(plaintext);
           setIsRevealed(true);
-          // Auto-hide after 15 seconds
           setTimeout(() => {
             setIsRevealed(false);
             setRevealedKey(null);
@@ -211,8 +225,21 @@ export function KeyCard({
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: -4 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="absolute right-0 top-full mt-1 z-50 w-40 py-1 rounded-xl bg-sidebar border border-border-subtle shadow-xl"
+                  className="absolute right-0 top-full mt-1 z-50 w-44 py-1 rounded-xl bg-sidebar border border-border-subtle shadow-xl"
                 >
+                  {/* Edit */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowMenu(false);
+                      onEdit?.(id);
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
+                  >
+                    <Pen size={12} />
+                    Edit Key
+                  </button>
+                  {/* Dashboard */}
                   {dashboardUrl && (
                     <a
                       href={dashboardUrl}
@@ -225,6 +252,9 @@ export function KeyCard({
                       Open Dashboard
                     </a>
                   )}
+                  {/* Separator */}
+                  <div className="my-1 border-t border-border-subtle/50" />
+                  {/* Delete */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

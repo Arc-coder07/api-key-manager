@@ -73,9 +73,7 @@ export function Sidebar() {
           Navigation
         </p>
         {navItems.map(({ to, label, icon: Icon }) => {
-          const isActive =
-            location.pathname === to ||
-            (to === "/vault" && location.pathname === "/");
+          const isActive = location.pathname === to;
 
           return (
             <NavLink
@@ -143,7 +141,16 @@ export function Sidebar() {
               <span>All Projects</span>
             </button>
             {projects.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-text-muted italic">No custom projects yet</p>
+              <button
+                onClick={() => {
+                  setProjectToEdit(null);
+                  setIsModalOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-3 rounded-lg border border-dashed border-border-subtle text-xs text-text-muted hover:text-accent hover:border-accent/30 hover:bg-accent/5 transition-all"
+              >
+                <Plus size={14} />
+                <span>Create your first project</span>
+              </button>
             ) : (
               projects.map((project) => (
                 <div
@@ -176,7 +183,7 @@ export function Sidebar() {
                     </span>
                   </div>
                   
-                  {hoveredProjectId === project.id && (
+                  {(hoveredProjectId === project.id || activeProjectId === project.id) && (
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={(e) => {

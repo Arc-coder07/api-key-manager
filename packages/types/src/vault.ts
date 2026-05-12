@@ -52,3 +52,26 @@ export interface DrawerState {
   /** The key ID being edited or viewed (null for 'add' mode) */
   keyId: string | null;
 }
+
+// ─── Linked Export ──────────────────────────────────────────────
+// Represents a link between a project's keys and a file on disk.
+// When autoSync is enabled, Vaultic updates the file on key changes.
+
+export interface LinkedExport {
+  /** Unique identifier (UUID v4) */
+  id: string;
+  /** The project this export is linked to (null = all keys / vault-wide) */
+  projectId: string | null;
+  /** Absolute OS file path where the export lives */
+  filePath: string;
+  /** Export format */
+  format: 'env' | 'json';
+  /** Whether to include decrypted values or metadata-only */
+  exportType: 'full' | 'metadata';
+  /** Whether to prompt for re-sync when keys change */
+  autoSync: boolean;
+  /** ISO 8601 timestamp of last successful sync */
+  lastSynced: string;
+  /** ISO 8601 timestamp when this link was created */
+  createdAt: string;
+}

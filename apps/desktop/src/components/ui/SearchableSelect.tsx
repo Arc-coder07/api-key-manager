@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Search, Check } from "lucide-react";
+import { ChevronDown, Search, Check, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface SelectOption {
@@ -16,7 +16,15 @@ interface SearchableSelectProps {
   placeholder?: string;
   label?: string;
   searchPlaceholder?: string;
+  /** Inline action button shown at the bottom of the dropdown */
+  inlineAction?: {
+    label: string;
+    onClick: () => void;
+  };
 }
+
+// Incremental z-index to avoid collisions between multiple dropdowns
+let instanceCounter = 0;
 
 export function SearchableSelect({
   options,
@@ -25,11 +33,13 @@ export function SearchableSelect({
   placeholder = "Select...",
   label,
   searchPlaceholder = "Search...",
+  inlineAction,
 }: SearchableSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [zIndex] = useState(() => 50 + ++instanceCounter);
 
   const filtered = options.filter(
     (opt) =>
@@ -102,7 +112,8 @@ export function SearchableSelect({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-50 mt-1 w-full rounded-xl bg-sidebar border border-border-subtle shadow-xl overflow-hidden"
+            className="absolute mt-1 w-full rounded-xl bg-sidebar border border-border-subtle shadow-xl overflow-hidden"
+            style={{ zIndex }}
           >
             {/* Search */}
             <div className="p-2 border-b border-border-subtle">
@@ -157,6 +168,24 @@ export function SearchableSelect({
                 ))
               )}
             </div>
+
+            {/* Inline Action */}
+            {inlineAction && (
+              <div className="border-t border-border-subtle">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setQuery("");
+                    inlineAction.onClick();
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-accent hover:bg-accent/5 transition-colors font-medium"
+                >
+                  <Plus size={14} />
+                  {inlineAction.label}
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
