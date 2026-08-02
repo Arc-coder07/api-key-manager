@@ -9,6 +9,13 @@
 //   2. Derived keys are returned as opaque CryptoKey objects
 //   3. All encryption uses AES-256-GCM with random IVs
 //   4. PBKDF2 with 100,000 iterations for key derivation
+//
+// Architecture:
+//   - Default mode: A random AES-256 key is generated and stored locally.
+//     No password is required — the app manages the key transparently.
+//   - Password mode (opt-in): The encryption key is "wrapped" (encrypted)
+//     using a password-derived key via AES-KW. The user must enter
+//     their password to unwrap the key on each app launch.
 // ─────────────────────────────────────────────────────────────────
 
 const PBKDF2_ITERATIONS = 100_000;
@@ -44,14 +51,135 @@ export function generateSalt(): string {
   return arrayBufferToBase64(salt.buffer);
 }
 
-// ─── Key Derivation (PBKDF2) ────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// RANDOM KEY GENERATION (Default Mode — No Password)
+// ═══════════════════════════════════════════════════════════════
 
 /**
- * Derive an AES-256-GCM encryption key from a master password.
+ * Generate a random AES-256-GCM encryption key.
+ * This is used in the default (no-password) mode.
+ * The key is extractable so it can be exported for storage.
+ *
+ * @returns A CryptoKey that can be used for encrypt/decrypt and exported
+ */
+export async function generateEncryptionKey(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: KEY_LENGTH },
+    true, // extractable — needed to export for storage
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Export a CryptoKey to a base64-encoded raw key string for storage.
+ *
+ * @param key - The CryptoKey to export
+ * @returns Base64-encoded raw key bytes
+ */
+export async function exportKey(key: CryptoKey): Promise<string> {
+  const rawBytes = await crypto.subtle.exportKey('raw', key);
+  return arrayBufferToBase64(rawBytes);
+}
+
+/**
+ * Import a base64-encoded raw key back into a CryptoKey.
+ * The imported key is extractable so it can be re-exported if needed
+ * (e.g., when enabling password wrapping).
+ *
+ * @param base64Key - Base64-encoded raw key bytes
+ * @returns A CryptoKey for encrypt/decrypt operations
+ */
+export async function importKey(base64Key: string): Promise<CryptoKey> {
+  const rawBytes = base64ToArrayBuffer(base64Key);
+  return crypto.subtle.importKey(
+    'raw',
+    rawBytes,
+    { name: 'AES-GCM', length: KEY_LENGTH },
+    true, // extractable — can be re-exported for wrapping
+    ['encrypt', 'decrypt']
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KEY WRAPPING (Optional Password Mode)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Wrap (encrypt) the encryption key using a password-derived key.
+ * Uses AES-GCM to wrap the raw key bytes.
+ *
+ * Called when the user enables password protection in settings.
+ * The wrapped key is stored in VaultConfig; the raw key is deleted.
+ *
+ * @param encryptionKey - The AES-256-GCM key to protect
+ * @param passwordKey   - A CryptoKey derived from the user's password
+ * @returns Object containing base64-encoded wrapped ciphertext and IV
+ */
+export async function wrapKey(
+  encryptionKey: CryptoKey,
+  passwordKey: CryptoKey
+): Promise<{ ciphertext: string; iv: string }> {
+  const rawKeyBytes = await crypto.subtle.exportKey('raw', encryptionKey);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+
+  const wrappedBytes = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    passwordKey,
+    rawKeyBytes
+  );
+
+  return {
+    ciphertext: arrayBufferToBase64(wrappedBytes),
+    iv: arrayBufferToBase64(iv.buffer),
+  };
+}
+
+/**
+ * Unwrap (decrypt) the encryption key using a password-derived key.
+ * Reverse of wrapKey().
+ *
+ * Called when the user enters their password on UnlockScreen.
+ *
+ * @param ciphertext  - Base64-encoded wrapped key bytes
+ * @param iv          - Base64-encoded IV used during wrapping
+ * @param passwordKey - A CryptoKey derived from the user's password
+ * @returns The original AES-256-GCM CryptoKey for encrypt/decrypt
+ * @throws If the password is wrong or data is corrupted
+ */
+export async function unwrapKey(
+  ciphertext: string,
+  iv: string,
+  passwordKey: CryptoKey
+): Promise<CryptoKey> {
+  const wrappedBytes = base64ToArrayBuffer(ciphertext);
+  const ivBytes = base64ToArrayBuffer(iv);
+
+  const rawKeyBytes = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: ivBytes },
+    passwordKey,
+    wrappedBytes
+  );
+
+  return crypto.subtle.importKey(
+    'raw',
+    rawKeyBytes,
+    { name: 'AES-GCM', length: KEY_LENGTH },
+    true, // extractable — may need to re-wrap with new password
+    ['encrypt', 'decrypt']
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KEY DERIVATION (PBKDF2) — Used for Password Mode
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Derive an AES-256-GCM key from a master password.
+ * Used to create the wrapping key for password mode.
  *
  * @param password - The user's master password (never stored)
  * @param salt     - Base64-encoded salt (stored in VaultConfig)
- * @returns An opaque CryptoKey that can be used for encrypt/decrypt
+ * @returns An opaque CryptoKey that can be used for wrap/unwrap
  */
 export async function deriveKey(
   password: string,
@@ -88,11 +216,6 @@ export async function deriveKey(
 }
 
 // ─── Verification ───────────────────────────────────────────────
-// Note: Verification hashing is performed inline within setupVault()
-// and verifyAndDeriveKey() using extractable key derivations. There
-// is no standalone generateVerificationHash() function because the
-// Web Crypto API does not allow re-importing a non-extractable key
-// as extractable after the fact.
 
 /**
  * Derive and verify password in one step.
@@ -146,18 +269,20 @@ export async function verifyAndDeriveKey(
     return null; // Wrong password
   }
 
-  // Now derive the non-extractable key for actual use
-  const usableKey = await deriveKey(password, salt);
-  return usableKey;
+  // Return the derived key directly — no second PBKDF2 call needed.
+  // This key is extractable, which is fine since it's used for
+  // wrapping/unwrapping the encryption key (not for data encryption).
+  return extractableKey;
 }
 
 /**
- * Setup: Create initial vault config salts and verification hash.
+ * Create verification artifacts for a password.
+ * Used when enabling password mode or changing password.
  *
  * @param password - The chosen master password
  * @returns Object containing salt, verificationSalt, verificationHash, and derivedKey
  */
-export async function setupVault(password: string): Promise<{
+export async function createPasswordEnvelope(password: string): Promise<{
   salt: string;
   verificationSalt: string;
   verificationHash: string;
@@ -206,13 +331,16 @@ export async function setupVault(password: string): Promise<{
   return { salt, verificationSalt, verificationHash, derivedKey };
 }
 
+// Keep legacy setupVault as an alias for backward compatibility
+export const setupVault = createPasswordEnvelope;
+
 // ─── Encryption (AES-256-GCM) ───────────────────────────────────
 
 /**
  * Encrypt a plaintext string using AES-256-GCM.
  *
  * @param plaintext  - The API key value to encrypt
- * @param derivedKey - The CryptoKey from deriveKey()
+ * @param derivedKey - The CryptoKey from deriveKey() or generateEncryptionKey()
  * @returns Object containing base64-encoded ciphertext and IV
  */
 export async function encrypt(
@@ -242,7 +370,7 @@ export async function encrypt(
  *
  * @param ciphertext - Base64-encoded ciphertext
  * @param iv         - Base64-encoded initialization vector
- * @param derivedKey - The CryptoKey from deriveKey()
+ * @param derivedKey - The CryptoKey from deriveKey() or generateEncryptionKey()
  * @returns The decrypted plaintext string
  * @throws If the key is wrong or the data is corrupted
  */

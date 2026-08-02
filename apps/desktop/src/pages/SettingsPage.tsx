@@ -11,11 +11,16 @@ import {
   Info,
   ChevronRight,
   Lock,
+  LockOpen,
   Clock,
   Clipboard,
   FileDown,
   FileUp,
   Zap,
+  Eye,
+  EyeOff,
+  Loader2,
+  Check,
 } from "lucide-react";
 
 // Animated settings row
@@ -27,6 +32,7 @@ function SettingRow({
   action,
   onAction,
   danger,
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -35,12 +41,15 @@ function SettingRow({
   action?: string;
   onAction?: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <motion.div
-      whileHover={{ backgroundColor: "rgba(26, 26, 31, 0.8)" }}
-      className="flex items-center justify-between p-4 rounded-xl bg-card border border-border-subtle cursor-pointer transition-colors"
-      onClick={onAction}
+      whileHover={disabled ? {} : { backgroundColor: "rgba(26, 26, 31, 0.8)" }}
+      className={`flex items-center justify-between p-4 rounded-xl bg-card border border-border-subtle transition-colors ${
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+      }`}
+      onClick={disabled ? undefined : onAction}
     >
       <div className="flex items-center gap-3">
         <div className={`p-2 rounded-lg ${danger ? "bg-status-red/10" : "bg-accent/10"}`}>
@@ -68,8 +77,215 @@ function SettingRow({
   );
 }
 
+// Password enable modal
+function EnablePasswordModal({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const enablePassword = useVaultStore((s) => s.enablePassword);
+
+  const passwordsMatch = password === confirmPassword;
+  const canSubmit = password.length >= 8 && passwordsMatch && confirmPassword.length > 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    const ok = await enablePassword(password);
+    if (ok) {
+      onClose();
+    } else {
+      setError("Failed to enable password");
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-bg-overlay/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative w-full max-w-sm bg-sidebar border border-border-subtle rounded-2xl shadow-xl"
+      >
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-accent/10">
+              <Lock size={18} className="text-accent" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Enable Password Lock</h3>
+              <p className="text-xxs text-text-muted mt-0.5">Your keys will stay encrypted — the password adds an extra layer</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters..."
+                autoFocus
+                className="w-full px-4 py-2.5 pr-10 rounded-xl bg-app border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
+              >
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">Confirm Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password..."
+              className="w-full px-4 py-2.5 rounded-xl bg-app border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+            />
+            {confirmPassword.length > 0 && !passwordsMatch && (
+              <p className="text-xs text-status-red mt-1">Passwords do not match</p>
+            )}
+            {confirmPassword.length > 0 && passwordsMatch && (
+              <p className="flex items-center gap-1 text-xs text-accent mt-1">
+                <Check size={12} /> Passwords match
+              </p>
+            )}
+          </div>
+
+          {error && <p className="text-xs text-status-red text-center">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-border-subtle text-sm font-medium text-text-secondary hover:bg-card-hover transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!canSubmit || isSubmitting}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                canSubmit && !isSubmitting
+                  ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
+                  : "bg-border-subtle text-text-muted cursor-not-allowed"
+              }`}
+            >
+              {isSubmitting ? (
+                <><Loader2 size={14} className="animate-spin" /> Enabling...</>
+              ) : (
+                <><Lock size={14} /> Enable</>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
+// Password disable modal
+function DisablePasswordModal({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const disablePassword = useVaultStore((s) => s.disablePassword);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    const ok = await disablePassword(password);
+    if (ok) {
+      onClose();
+    } else {
+      setError("Incorrect password");
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-bg-overlay/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative w-full max-w-sm bg-sidebar border border-border-subtle rounded-2xl shadow-xl"
+      >
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg bg-status-amber/10">
+              <LockOpen size={18} className="text-status-amber" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Disable Password Lock</h3>
+              <p className="text-xxs text-text-muted mt-0.5">Enter your current password to confirm</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">Current Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password..."
+              autoFocus
+              className="w-full px-4 py-2.5 rounded-xl bg-app border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+
+          {error && <p className="text-xs text-status-red text-center">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-border-subtle text-sm font-medium text-text-secondary hover:bg-card-hover transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!password.trim() || isSubmitting}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                password.trim() && !isSubmitting
+                  ? "bg-status-amber text-white hover:bg-status-amber/80"
+                  : "bg-border-subtle text-text-muted cursor-not-allowed"
+              }`}
+            >
+              {isSubmitting ? (
+                <><Loader2 size={14} className="animate-spin" /> Disabling...</>
+              ) : (
+                <><LockOpen size={14} /> Disable</>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isEnablingPassword, setIsEnablingPassword] = useState(false);
+  const [isDisablingPassword, setIsDisablingPassword] = useState(false);
   const navigate = useNavigate();
   const { toasts, dismissToast } = useToast();
 
@@ -78,6 +294,7 @@ export function SettingsPage() {
   const isMigrating = useVaultStore((s) => s.isMigrating);
   const migrationProgress = useVaultStore((s) => s.migrationProgress);
 
+  const passwordEnabled = config?.passwordEnabled ?? false;
   const autoLock = config?.autoLockMinutes ?? 15;
   const clipboardClear = config?.clipboardClearSeconds ?? 30;
 
@@ -118,9 +335,9 @@ export function SettingsPage() {
             >
               <div className="bg-card border border-accent/20 p-8 rounded-2xl max-w-sm w-full shadow-2xl text-center">
                 <Lock size={32} className="text-accent mx-auto mb-4 animate-pulse" />
-                <h3 className="text-lg font-bold text-text-primary mb-2">Re-Encrypting Data</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-2">Updating Password</h3>
                 <p className="text-sm text-text-secondary mb-6">
-                  Applying new security envelope. Please do not close the application.
+                  Applying new security envelope. This should be instant.
                 </p>
                 {migrationProgress && (
                   <div className="w-full bg-border-subtle rounded-full h-2 overflow-hidden mb-2">
@@ -134,8 +351,8 @@ export function SettingsPage() {
                 )}
                 <p className="text-xs text-text-muted font-mono">
                   {migrationProgress
-                    ? `Processing ${migrationProgress.current} / ${migrationProgress.total} keys`
-                    : "Initializing sequence..."}
+                    ? `Processing ${migrationProgress.current} / ${migrationProgress.total}`
+                    : "Initializing..."}
                 </p>
               </div>
             </motion.div>
@@ -156,14 +373,40 @@ export function SettingsPage() {
               Security
             </h3>
             <div className="space-y-2">
+              {/* Password Lock Toggle */}
               <SettingRow
-                icon={<Clock size={16} className="text-accent" />}
-                label="Auto-lock timeout"
-                description="Lock the vault after inactivity"
-                value={autoLock === 0 ? "Never" : `${autoLock} min`}
-                action="Change"
-                onAction={handleAutoLockCycle}
+                icon={passwordEnabled
+                  ? <Lock size={16} className="text-accent" />
+                  : <LockOpen size={16} className="text-accent" />
+                }
+                label="Password lock"
+                description={passwordEnabled
+                  ? "Password required on app launch and after inactivity"
+                  : "No password needed — keys are still encrypted"
+                }
+                value={passwordEnabled ? "On" : "Off"}
+                action={passwordEnabled ? "Disable" : "Enable"}
+                onAction={() => {
+                  if (passwordEnabled) {
+                    setIsDisablingPassword(true);
+                  } else {
+                    setIsEnablingPassword(true);
+                  }
+                }}
               />
+
+              {/* Auto-lock — only when password is enabled */}
+              <SettingRow
+                icon={<Clock size={16} className={passwordEnabled ? "text-accent" : "text-text-muted"} />}
+                label="Auto-lock timeout"
+                description={passwordEnabled ? "Lock the vault after inactivity" : "Enable password lock to use auto-lock"}
+                value={passwordEnabled ? (autoLock === 0 ? "Never" : `${autoLock} min`) : "—"}
+                action={passwordEnabled ? "Change" : undefined}
+                onAction={passwordEnabled ? handleAutoLockCycle : undefined}
+                disabled={!passwordEnabled}
+              />
+
+              {/* Clipboard auto-clear */}
               <SettingRow
                 icon={<Clipboard size={16} className="text-accent" />}
                 label="Clipboard auto-clear"
@@ -172,13 +415,17 @@ export function SettingsPage() {
                 action="Change"
                 onAction={handleClipboardCycle}
               />
-              <SettingRow
-                icon={<Lock size={16} className="text-accent" />}
-                label="Change master password"
-                description="Update your vault encryption password"
-                action="Change"
-                onAction={() => setIsChangingPassword(true)}
-              />
+
+              {/* Change password — only when password is enabled */}
+              {passwordEnabled && (
+                <SettingRow
+                  icon={<Lock size={16} className="text-accent" />}
+                  label="Change password"
+                  description="Update your vault password — no re-encryption needed"
+                  action="Change"
+                  onAction={() => setIsChangingPassword(true)}
+                />
+              )}
             </div>
           </section>
 
@@ -240,13 +487,15 @@ export function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-text-primary">Vaultic</p>
-                  <p className="text-xs text-text-muted">v0.1.0 · Phase 8</p>
+                  <p className="text-xs text-text-muted">v0.2.0</p>
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Zero-knowledge encrypted API key vault for developers.
-                Your keys are encrypted locally with AES-256-GCM and never leave your device.
-                The master password is never stored — only you can unlock your vault.
+                Encrypted API key vault for developers.
+                Your keys are always encrypted locally with AES-256-GCM.
+                {passwordEnabled
+                  ? " Your encryption key is protected by your master password."
+                  : " No password needed — your encryption key is managed automatically."}
               </p>
             </div>
           </section>
@@ -257,6 +506,20 @@ export function SettingsPage() {
       {isChangingPassword && (
         <ChangePasswordModal onClose={() => setIsChangingPassword(false)} />
       )}
+
+      {/* Enable Password Modal */}
+      <AnimatePresence>
+        {isEnablingPassword && (
+          <EnablePasswordModal onClose={() => setIsEnablingPassword(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* Disable Password Modal */}
+      <AnimatePresence>
+        {isDisablingPassword && (
+          <DisablePasswordModal onClose={() => setIsDisablingPassword(false)} />
+        )}
+      </AnimatePresence>
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>

@@ -2,17 +2,23 @@
 // useVaultStore — The core Zustand store for Vaultic
 // ─────────────────────────────────────────────────────────────────
 // Manages:
-//   - Vault lifecycle (setup → lock → unlock)
+//   - Vault lifecycle (setup → auto-unlock / password-unlock)
 //   - Encryption key (CryptoKey) held in RAM only
 //   - Keys and projects persisted via LocalForage
-//   - Auto-lock timer
+//   - Optional password protection (wrap/unwrap encryption key)
+//   - Auto-lock timer (only when password is enabled)
 // ─────────────────────────────────────────────────────────────────
 
 import { create } from "zustand";
 import localforage from "localforage";
 import { v4 as uuidv4 } from "uuid";
 import {
-  setupVault,
+  generateEncryptionKey,
+  exportKey,
+  importKey,
+  wrapKey,
+  unwrapKey,
+  createPasswordEnvelope,
   verifyAndDeriveKey,
   encrypt,
   decrypt,
@@ -48,6 +54,12 @@ const linkedExportsStore = localforage.createInstance({
   storeName: "linked_exports",
 });
 
+/** Separate store for the raw encryption key (only used when password is NOT enabled) */
+const keyStore = localforage.createInstance({
+  name: "vaultic",
+  storeName: "encryption_key",
+});
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface NewKeyInput {
@@ -64,10 +76,10 @@ export interface NewKeyInput {
 
 interface VaultStoreState {
   // ── Lifecycle ──────────────────────────────────
-  isInitialized: boolean; // Has the user ever set a master password?
+  isInitialized: boolean; // Has the vault been set up?
   isUnlocked: boolean;    // Is the vault currently accessible?
   isLoading: boolean;     // Is an async operation in progress?
-  isMigrating: boolean;   // Is a master-password re-encryption running?
+  isMigrating: boolean;   // Is a password change in progress?
   migrationProgress: { current: number; total: number } | null;
   error: string | null;   // Last error message
 
@@ -88,14 +100,23 @@ interface VaultStoreState {
   /** Load config from LocalForage and determine initial state */
   initialize: () => Promise<void>;
 
-  /** First-time setup: create master password */
-  setup: (password: string) => Promise<boolean>;
+  /** First-time setup: generates random encryption key, no password needed */
+  setup: () => Promise<boolean>;
 
-  /** Unlock vault with master password */
+  /** Unlock vault with master password (only when passwordEnabled) */
   unlock: (password: string) => Promise<boolean>;
 
-  /** Lock vault: wipe derived key from RAM */
+  /** Lock vault: wipe derived key from RAM (only meaningful when passwordEnabled) */
   lock: () => void;
+
+  /** Enable password protection: wraps the encryption key with a password */
+  enablePassword: (password: string) => Promise<boolean>;
+
+  /** Disable password protection: unwraps the key and stores it raw */
+  disablePassword: (currentPassword: string) => Promise<boolean>;
+
+  /** Change master password: re-wraps the encryption key (no re-encryption needed!) */
+  changeMasterPassword: (currentPass: string, newPass: string) => Promise<boolean>;
 
   /** Add a new API key (encrypts the value) */
   addKey: (input: NewKeyInput) => Promise<void>;
@@ -115,8 +136,7 @@ interface VaultStoreState {
   /** Update an existing project */
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
 
-  /** Delete a project, handling associated keys based on the strategy. 
-   * Strategy can be 'orphan', 'delete', or 'reassign'. If 'reassign', reassignProjectId must be provided. */
+  /** Delete a project, handling associated keys based on the strategy. */
   deleteProject: (id: string, cascadeStrategy: "orphan" | "delete" | "reassign", reassignProjectId?: string) => Promise<void>;
 
   /** Record user activity (for auto-lock timer) */
@@ -131,9 +151,6 @@ interface VaultStoreState {
   /** Update configurable vault settings safely */
   updateConfig: (updates: Partial<VaultConfig>) => Promise<void>;
 
-  /** Change master password — full re-encryption of all keys */
-  changeMasterPassword: (currentPass: string, newPass: string) => Promise<boolean>;
-
   /** Increment the finder search count for today, resetting if a new day. */
   incrementSearchCount: () => Promise<number>;
 
@@ -142,6 +159,15 @@ interface VaultStoreState {
   removeLinkedExport: (id: string) => Promise<void>;
   updateLinkedExport: (id: string, updates: Partial<LinkedExport>) => Promise<void>;
   getLinkedExportsForProject: (projectId: string | null) => LinkedExport[];
+}
+
+// ─── Helper: Load all vault data from LocalForage ───────────────
+
+async function loadVaultData() {
+  const keys = (await keysStore.getItem<ApiKeyEntry[]>("keys")) || [];
+  const projects = (await projectsStore.getItem<Project[]>("projects")) || [];
+  const linkedExports = (await linkedExportsStore.getItem<LinkedExport[]>("linked_exports")) || [];
+  return { keys, projects, linkedExports };
 }
 
 // ─── Store Implementation ───────────────────────────────────────
@@ -164,52 +190,80 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
   // ── initialize ─────────────────────────────────
   // Called once on app startup to check if a vault exists
+  // and auto-unlock if no password is required
   initialize: async () => {
     try {
       const config = await configStore.getItem<VaultConfig>("vault_config");
-      if (config && config.vaultInitialized) {
-        set({ isInitialized: true, config, isLoading: false });
-      } else {
+
+      if (!config || !config.vaultInitialized) {
+        // First-time user — show onboarding
         set({ isInitialized: false, isLoading: false });
+        return;
       }
+
+      // Vault exists — check if we can auto-unlock
+      if (!config.passwordEnabled) {
+        // No password — load the raw key and auto-unlock
+        const rawKeyBase64 = await keyStore.getItem<string>("raw_key");
+        if (rawKeyBase64) {
+          const encryptionKey = await importKey(rawKeyBase64);
+          const data = await loadVaultData();
+          set({
+            isInitialized: true,
+            isUnlocked: true,
+            isLoading: false,
+            derivedKey: encryptionKey,
+            lastActivity: Date.now(),
+            config,
+            ...data,
+          });
+          return;
+        }
+        // Key missing — something went wrong, treat as uninitialized
+        set({ isInitialized: false, isLoading: false });
+        return;
+      }
+
+      // Password enabled — user must unlock manually
+      set({ isInitialized: true, config, isLoading: false });
     } catch {
       set({ isLoading: false, error: "Failed to read vault configuration" });
     }
   },
 
   // ── setup ──────────────────────────────────────
-  // First-time: creates salts, verification hash, and stores config
-  setup: async (password: string) => {
+  // First-time: generates random encryption key, no password needed
+  setup: async () => {
     set({ isLoading: true, error: null });
     try {
-      const result = await setupVault(password);
+      // Generate a random AES-256-GCM encryption key
+      const encryptionKey = await generateEncryptionKey();
+      const rawKeyBase64 = await exportKey(encryptionKey);
 
+      // Store the raw key in a separate LocalForage instance
+      await keyStore.setItem("raw_key", rawKeyBase64);
+
+      // Create vault config — no password by default
       const config: VaultConfig = {
-        salt: result.salt,
-        verificationSalt: result.verificationSalt,
-        verificationHash: result.verificationHash,
+        vaultInitialized: true,
+        passwordEnabled: false,
         autoLockMinutes: 15,
         clipboardClearSeconds: 30,
-        vaultInitialized: true,
       };
 
       await configStore.setItem("vault_config", config);
 
       // Load any existing keys/projects (should be empty on first setup)
-      const keys = (await keysStore.getItem<ApiKeyEntry[]>("keys")) || [];
-      const projects = (await projectsStore.getItem<Project[]>("projects")) || [];
-      const linkedExports = (await linkedExportsStore.getItem<LinkedExport[]>("linked_exports")) || [];
+      const data = await loadVaultData();
 
       set({
         isInitialized: true,
         isUnlocked: true,
         isLoading: false,
-        derivedKey: result.derivedKey,
+        derivedKey: encryptionKey,
         lastActivity: Date.now(),
         config,
-        keys,
-        linkedExports,
-        projects,
+        ...data,
       });
 
       return true;
@@ -220,41 +274,49 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   // ── unlock ─────────────────────────────────────
-  // Returning user: verify password and derive key
+  // Returning user with password enabled: verify password and unwrap key
   unlock: async (password: string) => {
     const { config } = get();
-    if (!config) {
-      set({ error: "Vault configuration not found" });
+    if (!config || !config.passwordEnabled) {
+      set({ error: "Password is not enabled" });
+      return false;
+    }
+    if (!config.salt || !config.verificationSalt || !config.verificationHash || !config.wrappedKey) {
+      set({ error: "Invalid vault configuration" });
       return false;
     }
 
     set({ isLoading: true, error: null });
     try {
-      const derivedKey = await verifyAndDeriveKey(
+      // Verify password
+      const passwordKey = await verifyAndDeriveKey(
         password,
         config.salt,
         config.verificationSalt,
         config.verificationHash
       );
 
-      if (!derivedKey) {
+      if (!passwordKey) {
         set({ isLoading: false, error: "Incorrect password" });
         return false;
       }
 
+      // Unwrap the encryption key
+      const encryptionKey = await unwrapKey(
+        config.wrappedKey.ciphertext,
+        config.wrappedKey.iv,
+        passwordKey
+      );
+
       // Load persisted data
-      const keys = (await keysStore.getItem<ApiKeyEntry[]>("keys")) || [];
-      const projects = (await projectsStore.getItem<Project[]>("projects")) || [];
-      const linkedExports = (await linkedExportsStore.getItem<LinkedExport[]>("linked_exports")) || [];
+      const data = await loadVaultData();
 
       set({
         isUnlocked: true,
         isLoading: false,
-        derivedKey,
+        derivedKey: encryptionKey,
         lastActivity: Date.now(),
-        keys,
-        projects,
-        linkedExports,
+        ...data,
         error: null,
       });
 
@@ -266,7 +328,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   // ── lock ───────────────────────────────────────
-  // Wipe derived key from memory
+  // Wipe derived key from memory (only useful when password is enabled)
   lock: () => {
     set({
       isUnlocked: false,
@@ -276,6 +338,159 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       linkedExports: [],
       error: null,
     });
+  },
+
+  // ── enablePassword ─────────────────────────────
+  // Wraps the current encryption key with a password-derived key
+  enablePassword: async (password: string) => {
+    const { derivedKey, config } = get();
+    if (!derivedKey || !config) {
+      set({ error: "Vault must be unlocked" });
+      return false;
+    }
+
+    set({ isLoading: true, error: null });
+    try {
+      // Create password envelope (salt, verification hash, derived key)
+      const envelope = await createPasswordEnvelope(password);
+
+      // Wrap the encryption key with the password-derived key
+      const wrapped = await wrapKey(derivedKey, envelope.derivedKey);
+
+      // Delete the raw key from storage
+      await keyStore.removeItem("raw_key");
+
+      // Update config with password artifacts
+      const newConfig: VaultConfig = {
+        ...config,
+        passwordEnabled: true,
+        salt: envelope.salt,
+        verificationSalt: envelope.verificationSalt,
+        verificationHash: envelope.verificationHash,
+        wrappedKey: wrapped,
+      };
+
+      await configStore.setItem("vault_config", newConfig);
+      set({ config: newConfig, isLoading: false });
+
+      return true;
+    } catch {
+      set({ isLoading: false, error: "Failed to enable password" });
+      return false;
+    }
+  },
+
+  // ── disablePassword ────────────────────────────
+  // Unwraps the key and stores it raw, removing password requirement
+  disablePassword: async (currentPassword: string) => {
+    const { config, derivedKey } = get();
+    if (!config || !config.passwordEnabled || !derivedKey) {
+      set({ error: "Password is not enabled or vault is locked" });
+      return false;
+    }
+    if (!config.salt || !config.verificationSalt || !config.verificationHash) {
+      set({ error: "Invalid vault configuration" });
+      return false;
+    }
+
+    set({ isLoading: true, error: null });
+    try {
+      // Verify current password
+      const passwordKey = await verifyAndDeriveKey(
+        currentPassword,
+        config.salt,
+        config.verificationSalt,
+        config.verificationHash
+      );
+
+      if (!passwordKey) {
+        set({ isLoading: false, error: "Incorrect password" });
+        return false;
+      }
+
+      // Export the encryption key and store it raw
+      const rawKeyBase64 = await exportKey(derivedKey);
+      await keyStore.setItem("raw_key", rawKeyBase64);
+
+      // Remove password artifacts from config
+      const newConfig: VaultConfig = {
+        vaultInitialized: config.vaultInitialized,
+        passwordEnabled: false,
+        autoLockMinutes: config.autoLockMinutes,
+        clipboardClearSeconds: config.clipboardClearSeconds,
+        finderSearchCount: config.finderSearchCount,
+        finderSearchDate: config.finderSearchDate,
+      };
+
+      await configStore.setItem("vault_config", newConfig);
+      set({ config: newConfig, isLoading: false });
+
+      return true;
+    } catch {
+      set({ isLoading: false, error: "Failed to disable password" });
+      return false;
+    }
+  },
+
+  // ── changeMasterPassword ──────────────────────────
+  // Simply re-wraps the encryption key with a new password.
+  // No re-encryption of individual keys needed!
+  changeMasterPassword: async (currentPass: string, newPass: string) => {
+    const { config, derivedKey } = get();
+    if (!config || !config.passwordEnabled || !derivedKey) {
+      set({ error: "Password must be enabled and vault unlocked" });
+      return false;
+    }
+    if (!config.salt || !config.verificationSalt || !config.verificationHash) {
+      set({ error: "Invalid vault configuration" });
+      return false;
+    }
+
+    set({ isMigrating: true, error: null });
+
+    try {
+      // 1. Verify current password
+      const currentPasswordKey = await verifyAndDeriveKey(
+        currentPass,
+        config.salt,
+        config.verificationSalt,
+        config.verificationHash
+      );
+      if (!currentPasswordKey) {
+        set({ isMigrating: false, error: "Incorrect current password" });
+        return false;
+      }
+
+      // 2. Create new password envelope
+      const newEnvelope = await createPasswordEnvelope(newPass);
+
+      // 3. Re-wrap the encryption key with the new password key
+      const newWrapped = await wrapKey(derivedKey, newEnvelope.derivedKey);
+
+      // 4. Update config
+      const newConfig: VaultConfig = {
+        ...config,
+        salt: newEnvelope.salt,
+        verificationSalt: newEnvelope.verificationSalt,
+        verificationHash: newEnvelope.verificationHash,
+        wrappedKey: newWrapped,
+      };
+
+      await configStore.setItem("vault_config", newConfig);
+
+      set({
+        config: newConfig,
+        isMigrating: false,
+      });
+
+      return true;
+    } catch {
+      set({
+        isMigrating: false,
+        error: "Password change failed. Your old password is still active.",
+      });
+      return false;
+    }
   },
 
   // ── addKey ─────────────────────────────────────
@@ -454,9 +669,13 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   },
 
   // ── checkAutoLock ──────────────────────────────
+  // Only locks when password is enabled
   checkAutoLock: () => {
     const { isUnlocked, lastActivity, config, lock } = get();
-    if (!isUnlocked || !config || config.autoLockMinutes === 0) return;
+    if (!isUnlocked || !config) return;
+    // Only auto-lock if password is enabled
+    if (!config.passwordEnabled) return;
+    if (config.autoLockMinutes === 0) return;
 
     const timeoutMs = config.autoLockMinutes * 60 * 1000;
     if (Date.now() - lastActivity > timeoutMs) {
@@ -501,100 +720,6 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const newConfig = { ...config, ...updates };
     await configStore.setItem("vault_config", newConfig);
     set({ config: newConfig });
-  },
-
-  // ── changeMasterPassword ──────────────────────────
-  // Full re-encryption: decrypt every key with old derivedKey,
-  // generate fresh security envelope, re-encrypt all keys.
-  // Atomic: on failure, nothing is committed — old password stays valid.
-  changeMasterPassword: async (currentPass: string, newPass: string) => {
-    const { config, derivedKey, keys } = get();
-    if (!config || !derivedKey) {
-      set({ error: "Vault must be unlocked to change password" });
-      return false;
-    }
-
-    set({ isMigrating: true, error: null, migrationProgress: { current: 0, total: keys.length } });
-
-    try {
-      // 1. Verify current password
-      const verifiedKey = await verifyAndDeriveKey(
-        currentPass,
-        config.salt,
-        config.verificationSalt,
-        config.verificationHash
-      );
-      if (!verifiedKey) {
-        set({ isMigrating: false, migrationProgress: null, error: "Incorrect current password" });
-        return false;
-      }
-
-      // 2. Generate fresh security envelope from new password
-      const newEnvelope = await setupVault(newPass);
-
-      // 3. Re-encrypt every key: decrypt with old key → encrypt with new key
-      const totalKeys = keys.length;
-      const reEncryptedKeys: ApiKeyEntry[] = [];
-
-      for (let i = 0; i < totalKeys; i++) {
-        const k = keys[i];
-        try {
-          const plaintext = await decrypt(k.encrypted.ciphertext, k.encrypted.iv, derivedKey);
-          const newEncrypted = await encrypt(plaintext, newEnvelope.derivedKey);
-          reEncryptedKeys.push({
-            ...k,
-            encrypted: newEncrypted,
-            updatedAt: new Date().toISOString(),
-          });
-
-          // Yield to UI for progress updates every 5 keys
-          if (i % 5 === 0) {
-            set({ migrationProgress: { current: i + 1, total: totalKeys } });
-            await new Promise((r) => setTimeout(r, 0));
-          }
-        } catch (err) {
-          console.error("Migration error on key:", k.id, err);
-          throw new Error("MIGRATION_HALT_REVERT");
-        }
-      }
-
-      // 4. Parity check — must have re-encrypted every single key
-      if (reEncryptedKeys.length !== totalKeys) {
-        throw new Error("MIGRATION_HALT_REVERT");
-      }
-
-      set({ migrationProgress: { current: totalKeys, total: totalKeys } });
-
-      // 5. Atomic commit to LocalForage
-      const newConfig: VaultConfig = {
-        ...config,
-        salt: newEnvelope.salt,
-        verificationSalt: newEnvelope.verificationSalt,
-        verificationHash: newEnvelope.verificationHash,
-      };
-
-      await configStore.setItem("vault_config", newConfig);
-      await keysStore.setItem("keys", reEncryptedKeys);
-
-      // 6. Hot-swap in-memory state
-      set({
-        config: newConfig,
-        derivedKey: newEnvelope.derivedKey,
-        keys: reEncryptedKeys,
-        isMigrating: false,
-        migrationProgress: null,
-      });
-
-      return true;
-    } catch {
-      // On any failure, old password + old keys remain untouched
-      set({
-        isMigrating: false,
-        migrationProgress: null,
-        error: "Migration failed. Your old password is still active.",
-      });
-      return false;
-    }
   },
 
   // ── Linked Exports ─────────────────────────────

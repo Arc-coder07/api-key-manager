@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2, Pen } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2, Pen, Check } from "lucide-react";
 import { ProviderIcon } from "../ui/ProviderIcon";
+import { formatRelativeDate } from "../../utils/date";
 
 interface KeyCardProps {
   id: string;
@@ -14,6 +15,7 @@ interface KeyCardProps {
   projectName?: string;
   projectColor?: string;
   dashboardUrl?: string | null;
+  createdAt?: string;
   index?: number;
   onCopy?: (id: string) => void;
   onReveal?: (id: string) => Promise<string | null>;
@@ -22,22 +24,23 @@ interface KeyCardProps {
   onEdit?: (id: string) => void;
 }
 
-const tierStyles: Record<string, { bg: string; text: string }> = {
-  free: { bg: "bg-tier-free/15", text: "text-tier-free" },
-  paid: { bg: "bg-tier-paid/15", text: "text-tier-paid" },
-  trial: { bg: "bg-tier-trial/15", text: "text-tier-trial" },
+
+
+const getExpiryStyle = (days?: number | null) => {
+  if (days === undefined || days === null) return null;
+  if (days < 0) return "bg-red-500/10 text-red-500 border-red-500/20";
+  if (days <= 7) return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+  if (days <= 30) return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+  return "bg-text-muted/10 text-text-secondary border-border-subtle";
 };
 
-function getExpiryStyle(days: number | null | undefined) {
-  if (days == null) return null;
-  if (days <= 0) return { bg: "bg-status-red/15", text: "text-status-red", label: "Expired" };
-  if (days <= 7) return { bg: "bg-status-red/15", text: "text-status-red", label: `${days}d left` };
-  if (days <= 14) return { bg: "bg-status-amber/15", text: "text-status-amber", label: `${days}d left` };
-  if (days <= 30) return { bg: "bg-status-yellow/15", text: "text-status-yellow", label: `${days}d left` };
-  return null;
-}
+const tierStyles = {
+  free: "bg-blue-500/10 text-blue-500 border border-blue-500/20",
+  paid: "bg-green-500/10 text-green-500 border border-green-500/20",
+  trial: "bg-purple-500/10 text-purple-500 border border-purple-500/20"
+};
 
-export function KeyCard({
+export const KeyCard = ({
   id,
   name,
   provider,
@@ -47,231 +50,244 @@ export function KeyCard({
   projectName,
   projectColor,
   dashboardUrl,
+  createdAt,
   index = 0,
   onCopy,
   onReveal,
   onClick,
   onDelete,
-  onEdit,
-}: KeyCardProps) {
-  const [isRevealed, setIsRevealed] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  onEdit
+}: KeyCardProps) => {
   const [isRevealing, setIsRevealing] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  
+  const menuRef = useRef<HTMLDivElement>(null);
+  const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const badgeStyle = tierStyles[tier] ?? tierStyles.free;
-  const expiryStyle = getExpiryStyle(expiryDays);
-
-  // Close menu on scroll or window resize
   useEffect(() => {
-    if (!showMenu) return;
-
-    const closeMenu = () => setShowMenu(false);
-    window.addEventListener("scroll", closeMenu, true);
-    window.addEventListener("resize", closeMenu);
-    return () => {
-      window.removeEventListener("scroll", closeMenu, true);
-      window.removeEventListener("resize", closeMenu);
+    const handleClickOutside = (event: Event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
     };
-  }, [showMenu]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-  const handleCopy = (e: React.MouseEvent) => {
+  // Cleanup auto-hide timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsCopied(true);
-    onCopy?.(id);
-    setTimeout(() => setIsCopied(false), 2000);
+    if (onCopy) {
+      onCopy(id);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleReveal = async (e: React.MouseEvent) => {
+  const handleRevealToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isRevealed) {
-      setIsRevealed(false);
+    if (revealedKey) {
       setRevealedKey(null);
-    } else {
+      if (revealTimeoutRef.current) clearTimeout(revealTimeoutRef.current);
+      return;
+    }
+
+    if (onReveal) {
       setIsRevealing(true);
       try {
-        const plaintext = await onReveal?.(id);
-        if (plaintext) {
-          setRevealedKey(plaintext);
-          setIsRevealed(true);
-          setTimeout(() => {
-            setIsRevealed(false);
+        const key = await onReveal(id);
+        if (key) {
+          setRevealedKey(key);
+          // Auto-hide after 15s
+          revealTimeoutRef.current = setTimeout(() => {
             setRevealedKey(null);
           }, 15000);
         }
-      } catch (err) {
-        console.error("Reveal error:", err);
       } finally {
         setIsRevealing(false);
       }
     }
   };
 
+  const handleMenuClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(!menuOpen);
+  };
+
+  const displayKey = revealedKey || maskedKey;
+  const expiryStyle = getExpiryStyle(expiryDays);
+  const relativeDate = formatRelativeDate(createdAt);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.3,
-        delay: index * 0.05,
-        ease: [0.25, 0.46, 0.45, 0.94],
-      }}
+      transition={{ duration: 0.3, delay: index * 0.05 }}
       onClick={() => onClick?.(id)}
-      className="
-        group relative flex flex-col gap-3 p-4
-        bg-card border border-border-subtle rounded-xl
-        hover:bg-card-hover hover:border-border-active
-        hover:shadow-card-hover
-        card-transition cursor-pointer
-      "
+      className="group relative flex flex-col gap-4 bg-card border border-border-subtle rounded-xl p-5 hover:bg-card-hover hover:border-accent/30 transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 overflow-visible cursor-pointer"
     >
-      {/* ─── Top Row: Provider + Badges ──────────────── */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <ProviderIcon provider={provider} size={36} />
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-text-primary truncate">
+      {/* 2px left border accent on hover */}
+      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-l-xl" />
+
+      {/* Top Row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center bg-app/50 rounded-lg border border-border-subtle">
+            <ProviderIcon provider={provider} size={20} />
+          </div>
+          <div className="flex flex-col">
+            <h3 className="text-sm font-medium text-text-primary leading-tight">
               {name}
             </h3>
-            <p className="text-xs text-text-muted capitalize">{provider.replace(/-/g, " ")}</p>
+            <div className="flex items-center text-xs text-text-muted mt-0.5">
+              <span>{provider}</span>
+              {relativeDate && (
+                <>
+                  <span className="mx-1.5 opacity-50">•</span>
+                  <span>{relativeDate}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${badgeStyle.bg} ${badgeStyle.text}`}
+        {/* Context Menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={handleMenuClick}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-app/50 transition-colors"
           >
+            <MoreVertical size={16} />
+          </button>
+          
+          <AnimatePresence>
+            {menuOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, transformOrigin: 'top right' }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-1 w-44 bg-card border border-border-subtle rounded-lg shadow-xl z-20 overflow-hidden"
+              >
+                <div className="p-1 flex flex-col">
+                  {onEdit && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit(id); }}
+                      className="flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-app/50 rounded-md transition-colors"
+                    >
+                      <Pen size={14} className="text-text-muted" />
+                      Edit Key
+                    </button>
+                  )}
+                  {dashboardUrl && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(false);
+                        window.open(dashboardUrl, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-app/50 rounded-md transition-colors"
+                    >
+                      <ExternalLink size={14} className="text-text-muted" />
+                      Open Dashboard
+                    </button>
+                  )}
+                  {onDelete && (
+                    <>
+                      <div className="h-px bg-border-subtle my-1 mx-2" />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(id); }}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        Delete Key
+                      </button>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Middle Row - Key Display */}
+      <div className="flex items-center justify-between bg-app/50 border border-border-subtle rounded-lg p-2 pl-3 gap-2">
+        <code className="text-sm font-mono text-text-primary tracking-tight truncate flex-1 pt-0.5">
+          {displayKey}
+        </code>
+        
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleRevealToggle}
+            disabled={isRevealing}
+            className="flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-text-primary hover:bg-card-hover transition-colors disabled:opacity-50"
+            title={revealedKey ? "Hide key" : "Reveal key"}
+          >
+            {revealedKey ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+          
+          <button
+            onClick={handleCopy}
+            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium transition-all ${
+              copied 
+                ? "bg-green-500/10 text-green-500" 
+                : "bg-accent/10 text-accent hover:bg-accent/15"
+            }`}
+          >
+            {copied ? (
+              <>
+                <Check size={14} />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy size={14} />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Row - Project & Badges */}
+      <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center gap-2">
+          {projectName && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-app/50 rounded-md border border-border-subtle">
+              <div 
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: projectColor || 'rgb(var(--accent))' }}
+              />
+              <span className="text-xs text-text-secondary max-w-[120px] truncate">
+                {projectName}
+              </span>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] uppercase font-semibold px-2 py-1 rounded-md tracking-wider ${tierStyles[tier]}`}>
             {tier}
           </span>
-          {expiryStyle && (
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${expiryStyle.bg} ${expiryStyle.text}`}
-            >
-              {expiryStyle.label}
+          
+          {expiryDays !== null && expiryDays !== undefined && (
+            <span className={`text-[10px] font-medium px-2 py-1 rounded-md border ${expiryStyle}`}>
+              {expiryDays < 0 ? 'Expired' : `${expiryDays}d left`}
             </span>
           )}
         </div>
       </div>
-
-      {/* ─── Key Display ─────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-app/50 border border-border-subtle/50">
-        <code className="key-display flex-1 truncate">
-          {isRevealing ? "Decrypting..." : isRevealed ? revealedKey : maskedKey}
-        </code>
-        <button
-          onClick={handleReveal}
-          className="p-1 rounded text-text-muted hover:text-text-secondary transition-colors"
-          title={isRevealed ? "Hide key" : "Reveal key"}
-        >
-          {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-
-      {/* ─── Bottom Row: Project + Actions ────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {projectName && (
-            <div className="flex items-center gap-1.5">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: projectColor || "#71717a" }}
-              />
-              <span className="text-xs text-text-muted">{projectName}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={handleCopy}
-            className={`
-              flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
-              transition-all duration-150
-              ${
-                isCopied
-                  ? "bg-accent/20 text-accent"
-                  : "bg-border-subtle/50 text-text-secondary hover:bg-accent/15 hover:text-accent"
-              }
-            `}
-            title="Copy key"
-          >
-            <Copy size={12} />
-            <span>{isCopied ? "Copied!" : "Copy"}</span>
-          </button>
-
-          {/* Context Menu */}
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-              className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle/50 hover:text-text-secondary transition-colors"
-              title="More options"
-            >
-              <MoreVertical size={14} />
-            </button>
-
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowMenu(false);
-                  }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="absolute right-0 top-full mt-1 z-50 w-44 py-1 rounded-xl bg-sidebar border border-border-subtle shadow-xl"
-                >
-                  {/* Edit */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowMenu(false);
-                      onEdit?.(id);
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
-                  >
-                    <Pen size={12} />
-                    Edit Key
-                  </button>
-                  {/* Dashboard */}
-                  {dashboardUrl && (
-                    <a
-                      href={dashboardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink size={12} />
-                      Open Dashboard
-                    </a>
-                  )}
-                  {/* Separator */}
-                  <div className="my-1 border-t border-border-subtle/50" />
-                  {/* Delete */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowMenu(false);
-                      onDelete?.(id);
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-status-red hover:bg-status-red/10 transition-colors"
-                  >
-                    <Trash2 size={12} />
-                    Delete Key
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
     </motion.div>
   );
-}
+};

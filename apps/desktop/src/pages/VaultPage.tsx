@@ -116,10 +116,13 @@ export function VaultPage() {
   const clipboardClearMs = (config?.clipboardClearSeconds ?? 30) * 1000;
 
   // ─── Keyboard Shortcuts ─────────────────────────────
+  const passwordEnabled = config?.passwordEnabled ?? false;
   useKeyboardShortcuts({
     onNewKey: useCallback(() => setIsDrawerOpen(true), []),
     onSearch: useCallback(() => searchInputRef.current?.focus(), []),
-    onLockVault: useCallback(() => lockVault(), [lockVault]),
+    onLockVault: useCallback(() => {
+      if (passwordEnabled) lockVault();
+    }, [lockVault, passwordEnabled]),
   });
 
   // ─── Filtered Keys ──────────────────────────────────
@@ -148,6 +151,7 @@ export function VaultPage() {
           expiryDays: getDaysUntil(key.expiryDate),
           projectName: project?.name,
           projectColor: project?.color,
+          createdAt: key.createdAt,
         };
       });
   }, [keys_raw, projects, searchQuery, activeCategory, activeTier, activeProjectId]);

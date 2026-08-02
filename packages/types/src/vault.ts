@@ -1,20 +1,32 @@
 // ─── Vault Configuration ────────────────────────────────────────
-// Persisted to LocalForage — contains the PBKDF2 salt and
-// verification hash, but NEVER the master password or derived key.
+// Persisted to LocalForage — contains encryption key metadata
+// and security settings. The actual encryption key is stored
+// separately (raw in keyStore, or wrapped in config when password
+// is enabled).
 
 export interface VaultConfig {
-  /** Base64-encoded PBKDF2 salt for key derivation */
-  salt: string;
-  /** Base64-encoded salt used for verification hash */
-  verificationSalt: string;
-  /** Base64-encoded SHA-256 hash for password verification */
-  verificationHash: string;
-  /** Auto-lock timeout in minutes (default: 15) */
+  /** Whether the vault has been initialized */
+  vaultInitialized: boolean;
+
+  // ── Password Mode (opt-in) ─────────────────────
+  /** Whether a password is required to access the vault */
+  passwordEnabled: boolean;
+  /** Base64-encoded PBKDF2 salt for key derivation (only when passwordEnabled) */
+  salt?: string;
+  /** Base64-encoded salt used for verification hash (only when passwordEnabled) */
+  verificationSalt?: string;
+  /** Base64-encoded SHA-256 hash for password verification (only when passwordEnabled) */
+  verificationHash?: string;
+  /** The encryption key wrapped (encrypted) with the password-derived key (only when passwordEnabled) */
+  wrappedKey?: { ciphertext: string; iv: string };
+
+  // ── Settings ───────────────────────────────────
+  /** Auto-lock timeout in minutes (default: 15, only relevant when passwordEnabled) */
   autoLockMinutes: number;
   /** Clipboard auto-clear timeout in seconds (default: 30) */
   clipboardClearSeconds: number;
-  /** Whether the vault has been initialized with a master password */
-  vaultInitialized: boolean;
+
+  // ── Finder ─────────────────────────────────────
   /** Number of searches performed in the API finder today */
   finderSearchCount?: number;
   /** ISO Date string of the last search to dictate daily resets */
@@ -27,7 +39,7 @@ export type VaultStatus = 'uninitialized' | 'locked' | 'unlocked';
 
 export interface VaultState {
   status: VaultStatus;
-  /** The AES-GCM CryptoKey derived from the master password — RAM only */
+  /** The AES-GCM CryptoKey for encryption — RAM only */
   derivedKey: CryptoKey | null;
   /** Timestamp of last user activity (for auto-lock) */
   lastActivity: number;

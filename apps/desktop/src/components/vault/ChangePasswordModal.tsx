@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { X, Eye, EyeOff, Shield, Loader2, AlertTriangle } from "lucide-react";
+import { X, Eye, EyeOff, Shield, Loader2 } from "lucide-react";
 import { useVaultStore } from "../../stores/useVaultStore";
 
 interface ChangePasswordModalProps {
@@ -81,7 +81,7 @@ export function ChangePasswordModal({ onClose, onSuccess }: ChangePasswordModalP
                 Change Master Password
               </h3>
               <p className="text-xxs text-text-muted">
-                All keys will be re-encrypted
+                This is instant — no re-encryption needed
               </p>
             </div>
           </div>
@@ -96,11 +96,11 @@ export function ChangePasswordModal({ onClose, onSuccess }: ChangePasswordModalP
         </div>
 
         {/* Warning Banner */}
-        <div className="mx-5 mt-4 flex items-start gap-2.5 p-3 rounded-lg bg-status-amber/10 border border-status-amber/20">
-          <AlertTriangle size={14} className="text-status-amber shrink-0 mt-0.5" />
+        <div className="mx-5 mt-4 flex items-start gap-2.5 p-3 rounded-lg bg-accent/10 border border-accent/20">
+          <Shield size={14} className="text-accent shrink-0 mt-0.5" />
           <p className="text-xxs text-text-secondary leading-relaxed">
-            This will re-encrypt every API key in your vault with a new
-            security envelope. Do not close the app during this process.
+            Your API keys stay untouched. Only the password wrapping your
+            encryption key will change.
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export function ChangePasswordModal({ onClose, onSuccess }: ChangePasswordModalP
               {isMigrating ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  Migrating...
+                  Updating...
                 </>
               ) : (
                 "Change Password"

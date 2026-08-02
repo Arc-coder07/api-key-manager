@@ -43,7 +43,9 @@ export function SetupScreen() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    await setup(password);
+    // NOTE: SetupScreen is no longer used (replaced by OnboardingScreen).
+    // setup() now takes no arguments — password is optional and enabled via Settings.
+    await setup();
   };
 
   return (

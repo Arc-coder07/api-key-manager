@@ -10,6 +10,7 @@ import {
   Lock,
   Pen,
   Trash2,
+  Layers,
 } from "lucide-react";
 
 const navItems = [
@@ -24,7 +25,7 @@ import { ProjectModal } from "../projects/ProjectModal";
 import { ProjectDeleteConfirmation } from "../projects/ProjectDeleteConfirmation";
 import { getDaysUntil } from "../../utils/date";
 import type { Project } from "@vaultic/types";
-import { Layers } from "lucide-react";
+
 
 export function Sidebar() {
   const location = useLocation();
@@ -33,6 +34,8 @@ export function Sidebar() {
   const projects = useVaultStore((s) => s.projects);
   const activeProjectId = useVaultStore((s) => s.activeProjectId);
   const setActiveProject = useVaultStore((s) => s.setActiveProject);
+  const config = useVaultStore((s) => s.config);
+  const passwordEnabled = config?.passwordEnabled ?? false;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
@@ -217,15 +220,17 @@ export function Sidebar() {
       </nav>
 
       {/* ─── Bottom Actions ──────────────────────────── */}
-      <div className="px-3 py-3 border-t border-border-subtle">
-        <button 
-          onClick={lock}
-          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-status-red/10 hover:text-status-red transition-colors"
-        >
-          <Lock size={16} />
-          <span>Lock Vault</span>
-        </button>
-      </div>
+      {passwordEnabled && (
+        <div className="px-3 py-3 border-t border-border-subtle">
+          <button 
+            onClick={lock}
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-status-red/10 hover:text-status-red transition-colors"
+          >
+            <Lock size={16} />
+            <span>Lock Vault</span>
+          </button>
+        </div>
+      )}
       {/* ─── Modals ────────────────────────────────────── */}
       <ProjectModal 
         isOpen={isModalOpen}
