@@ -608,7 +608,7 @@ export function VaultPage() {
         {!activeProjectId && projects.length > 0 && !searchQuery && (
           <div className="mb-8">
             <h3 className="text-sm font-medium text-text-secondary mb-3 px-1">Projects</h3>
-            <div className="flex gap-3 overflow-x-auto pb-4 hide-scrollbar">
+            <div className="flex gap-4 overflow-x-auto pb-32 -mb-28 pt-2 -mt-2 hide-scrollbar relative z-20">
               {projects.map(project => {
                 const keyCount = keys_raw.filter(k => k.projectId === project.id).length;
                 return (
@@ -620,16 +620,16 @@ export function VaultPage() {
                       layout
                       whileHover={{ scale: 1.01 }}
                       onClick={() => setActiveProject(project.id)}
-                      className="flex items-center gap-4 p-4 w-56 rounded-2xl bg-card border border-border-subtle hover:bg-card-hover hover:border-border-active transition-colors shadow-sm hover:shadow-md group"
+                      className="flex items-center gap-4 p-5 w-64 rounded-2xl bg-card border border-border-subtle hover:bg-card-hover hover:border-border-active transition-colors shadow-sm hover:shadow-md group"
                     >
                       <div 
-                        className="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-app/50 border border-border-subtle rounded-xl shadow-sm"
+                        className="flex-shrink-0 flex items-center justify-center w-12 h-12 bg-app/50 border border-border-subtle rounded-xl shadow-sm"
                       >
-                        <Folder size={20} style={{ color: project.color || '#71717a' }} />
+                        <Folder size={24} style={{ color: project.color || '#71717a' }} />
                       </div>
                       <div className="text-left flex-1 min-w-0 pr-6">
-                        <p className="text-sm font-semibold text-text-primary truncate">{project.name}</p>
-                        <p className="text-xs text-text-muted">{keyCount} {keyCount === 1 ? 'key' : 'keys'}</p>
+                        <p className="text-base font-semibold text-text-primary truncate">{project.name}</p>
+                        <p className="text-sm text-text-muted">{keyCount} {keyCount === 1 ? 'key' : 'keys'}</p>
                       </div>
                     </motion.button>
 
@@ -650,7 +650,7 @@ export function VaultPage() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -5 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute right-0 top-14 w-40 py-1 bg-card border border-border-subtle rounded-xl shadow-xl z-50"
+                          className="absolute right-0 top-[76px] w-40 py-1 bg-card border border-border-subtle rounded-xl shadow-xl z-50"
                         >
                           <button
                             onClick={(e) => {
