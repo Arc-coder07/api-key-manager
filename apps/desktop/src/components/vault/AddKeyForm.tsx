@@ -161,7 +161,7 @@ export function AddKeyForm({
           value={form.name}
           onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           placeholder='e.g. "OpenAI — MedSage project"'
-          className="w-full px-3 py-2.5 rounded-lg bg-card border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+          className="w-full px-3 py-2.5 rounded-lg bg-app/50 border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all duration-200"
         />
       </div>
 
@@ -176,7 +176,7 @@ export function AddKeyForm({
             value={form.keyValue}
             onChange={(e) => setForm((prev) => ({ ...prev, keyValue: e.target.value }))}
             placeholder="Paste your API key here..."
-            className="w-full px-3 py-2.5 pr-10 rounded-lg bg-card border border-border-subtle text-sm font-mono text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+            className="w-full px-3 py-2.5 pr-10 rounded-lg bg-app/50 border border-border-subtle text-sm font-mono text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all duration-200"
           />
           <button
             type="button"
@@ -201,26 +201,26 @@ export function AddKeyForm({
           <label className="block text-xs font-medium text-text-secondary mb-1.5">
             Tier
           </label>
-          <div className="flex gap-1">
+          <div className="flex gap-1 p-1 rounded-lg bg-app/50 border border-border-subtle">
             {API_TIERS.map((t) => (
               <button
                 key={t.value}
                 type="button"
                 onClick={() => setForm((prev) => ({ ...prev, tier: t.value }))}
                 className={`
-                  flex-1 px-2 py-2 rounded-lg text-xs font-medium
-                  transition-all duration-150 border
+                  flex-1 px-2 py-1.5 rounded-md text-xs font-medium
+                  transition-all duration-200 border
                   ${
                     form.tier === t.value
-                      ? "border-current"
-                      : "border-border-subtle hover:border-border-active"
+                      ? "shadow-sm"
+                      : "border-transparent hover:bg-white/5"
                   }
                 `}
                 style={{
                   color: form.tier === t.value ? t.color : "#71717a",
                   backgroundColor:
                     form.tier === t.value ? `${t.color}15` : "transparent",
-                  borderColor: form.tier === t.value ? `${t.color}40` : undefined,
+                  borderColor: form.tier === t.value ? `${t.color}40` : "transparent",
                 }}
               >
                 {t.label}
@@ -249,13 +249,13 @@ export function AddKeyForm({
         <label className="flex items-center gap-1.5 text-xs font-medium text-text-secondary mb-1.5">
           <Calendar size={12} />
           Expiry Date
-          <span className="text-text-muted">(optional)</span>
+          <span className="text-text-muted font-normal">(optional)</span>
         </label>
         <input
           type="date"
           value={form.expiryDate}
           onChange={(e) => setForm((prev) => ({ ...prev, expiryDate: e.target.value }))}
-          className="w-full px-3 py-2.5 rounded-lg bg-card border border-border-subtle text-sm text-text-primary focus:outline-none focus:border-accent/50 transition-colors [color-scheme:dark]"
+          className="w-full px-3 py-2.5 rounded-lg bg-app/50 border border-border-subtle text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all duration-200 [color-scheme:dark]"
         />
       </div>
 
@@ -264,14 +264,14 @@ export function AddKeyForm({
         <label className="flex items-center gap-1.5 text-xs font-medium text-text-secondary mb-1.5">
           <Link size={12} />
           Dashboard URL
-          <span className="text-text-muted">(optional)</span>
+          <span className="text-text-muted font-normal">(optional)</span>
         </label>
         <input
           type="url"
           value={form.dashboardUrl}
           onChange={(e) => setForm((prev) => ({ ...prev, dashboardUrl: e.target.value }))}
           placeholder="https://provider.com/dashboard/api-keys"
-          className="w-full px-3 py-2.5 rounded-lg bg-card border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors"
+          className="w-full px-3 py-2.5 rounded-lg bg-app/50 border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all duration-200"
         />
       </div>
 
@@ -280,14 +280,14 @@ export function AddKeyForm({
         <label className="flex items-center gap-1.5 text-xs font-medium text-text-secondary mb-1.5">
           <FileText size={12} />
           Notes
-          <span className="text-text-muted">(optional)</span>
+          <span className="text-text-muted font-normal">(optional)</span>
         </label>
         <textarea
           value={form.notes}
           onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
           placeholder="What is this key for?"
           rows={3}
-          className="w-full px-3 py-2.5 rounded-lg bg-card border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent/50 transition-colors resize-none"
+          className="w-full px-3 py-2.5 rounded-lg bg-app/50 border border-border-subtle text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all duration-200 resize-none"
         />
       </div>
 
@@ -296,7 +296,7 @@ export function AddKeyForm({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-2.5 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
+          className="flex-1 px-4 py-2.5 rounded-lg border border-border-subtle text-sm font-medium text-text-secondary hover:bg-app/50 hover:text-text-primary transition-all duration-200"
         >
           Cancel
         </button>
@@ -304,11 +304,11 @@ export function AddKeyForm({
           type="submit"
           disabled={!isValid}
           className={`
-            flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150
+            flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
             ${
               isValid
-                ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
-                : "bg-border-subtle text-text-muted cursor-not-allowed"
+                ? "bg-accent text-white hover:brightness-110 shadow-glow"
+                : "bg-border-subtle text-text-muted cursor-not-allowed opacity-50"
             }
           `}
         >

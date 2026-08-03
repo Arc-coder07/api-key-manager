@@ -253,8 +253,11 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
       await configStore.setItem("vault_config", config);
 
-      // Load any existing keys/projects (should be empty on first setup)
-      const data = await loadVaultData();
+      // Clear any stale data from a previous vault (e.g. keys encrypted
+      // with a different password-derived key that can't be decrypted).
+      await keysStore.setItem("keys", []);
+      await projectsStore.setItem("projects", []);
+      await linkedExportsStore.setItem("linked_exports", []);
 
       set({
         isInitialized: true,
@@ -263,7 +266,9 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         derivedKey: encryptionKey,
         lastActivity: Date.now(),
         config,
-        ...data,
+        keys: [],
+        projects: [],
+        linkedExports: [],
       });
 
       return true;
@@ -586,7 +591,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         derivedKey
       );
       return plaintext;
-    } catch {
+    } catch (err) {
+      console.error("Failed to decrypt key (likely wrong derivation or stale data):", err);
       return null;
     }
   },

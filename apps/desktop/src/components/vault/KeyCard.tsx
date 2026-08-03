@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Eye, EyeOff, MoreVertical, ExternalLink, Trash2, Pen } from "lucide-react";
 import { ProviderIcon } from "../ui/ProviderIcon";
 import { formatRelativeDate } from "../../utils/date";
@@ -25,17 +25,17 @@ interface KeyCardProps {
 }
 
 const tierStyles: Record<string, { bg: string; text: string }> = {
-  free: { bg: "bg-tier-free/15", text: "text-tier-free" },
-  paid: { bg: "bg-tier-paid/15", text: "text-tier-paid" },
-  trial: { bg: "bg-tier-trial/15", text: "text-tier-trial" },
+  free: { bg: "bg-tier-free/10", text: "text-tier-free" },
+  paid: { bg: "bg-tier-paid/10", text: "text-tier-paid" },
+  trial: { bg: "bg-tier-trial/10", text: "text-tier-trial" },
 };
 
 function getExpiryStyle(days: number | null | undefined) {
   if (days == null) return null;
-  if (days <= 0) return { bg: "bg-status-red/15", text: "text-status-red", label: "Expired" };
-  if (days <= 7) return { bg: "bg-status-red/15", text: "text-status-red", label: `${days}d left` };
-  if (days <= 14) return { bg: "bg-status-amber/15", text: "text-status-amber", label: `${days}d left` };
-  if (days <= 30) return { bg: "bg-status-yellow/15", text: "text-status-yellow", label: `${days}d left` };
+  if (days <= 0) return { bg: "bg-status-red/10", text: "text-status-red", label: "Expired" };
+  if (days <= 7) return { bg: "bg-status-red/10", text: "text-status-red", label: `${days}d left` };
+  if (days <= 14) return { bg: "bg-status-amber/10", text: "text-status-amber", label: `${days}d left` };
+  if (days <= 30) return { bg: "bg-status-yellow/10", text: "text-status-yellow", label: `${days}d left` };
   return null;
 }
 
@@ -114,34 +114,37 @@ export function KeyCard({
 
   return (
     <motion.div
+      layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.01 }}
       transition={{
-        duration: 0.3,
-        delay: index * 0.05,
-        ease: [0.25, 0.46, 0.45, 0.94],
+        duration: 0.2,
+        delay: index * 0.03,
+        ease: "easeOut",
       }}
       onClick={() => onClick?.(id)}
       className="
-        group relative flex flex-col gap-3 p-4
-        bg-card border border-border-subtle rounded-xl
+        group relative flex flex-col gap-4 p-4
+        bg-card border border-border-subtle rounded-2xl
         hover:bg-card-hover hover:border-border-active
-        hover:shadow-card-hover
-        card-transition cursor-pointer
+        transition-colors cursor-pointer shadow-sm hover:shadow-md
       "
     >
-      {/* ─── Top Row: Provider + Badges ──────────────── */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <ProviderIcon provider={provider} size={36} />
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-text-primary truncate">
+      {/* Top Row: Provider, Name, Date, Badges */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-app/50 border border-border-subtle rounded-xl shadow-sm">
+            <ProviderIcon provider={provider} size={24} />
+          </div>
+          <div className="min-w-0 flex flex-col justify-center">
+            <h3 className="text-sm font-semibold text-text-primary truncate">
               {name}
             </h3>
-            <p className="text-xs text-text-muted capitalize">
-              {provider.replace(/-/g, " ")}
+            <p className="text-xs text-text-muted truncate">
+              <span className="capitalize">{provider.replace(/-/g, " ")}</span>
               {relativeDate && (
-                <span className="opacity-60"> · {relativeDate}</span>
+                <span className="opacity-75"> · {relativeDate}</span>
               )}
             </p>
           </div>
@@ -149,13 +152,13 @@ export function KeyCard({
 
         <div className="flex items-center gap-1.5 shrink-0">
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${badgeStyle.bg} ${badgeStyle.text}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider border border-current/10 ${badgeStyle.bg} ${badgeStyle.text}`}
           >
             {tier}
           </span>
           {expiryStyle && (
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-medium ${expiryStyle.bg} ${expiryStyle.text}`}
+              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider border border-current/10 ${expiryStyle.bg} ${expiryStyle.text}`}
             >
               {expiryStyle.label}
             </span>
@@ -163,121 +166,126 @@ export function KeyCard({
         </div>
       </div>
 
-      {/* ─── Key Display ─────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-app/50 border border-border-subtle/50">
-        <code className="key-display flex-1 truncate">
-          {isRevealing ? "Decrypting..." : isRevealed ? revealedKey : maskedKey}
-        </code>
-        <button
-          onClick={handleReveal}
-          className="p-1 rounded text-text-muted hover:text-text-secondary transition-colors"
-          title={isRevealed ? "Hide key" : "Reveal key"}
-        >
-          {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
+      {/* Middle: Key Display */}
+      <div className="flex items-center">
+        <div className="flex-1 flex items-center px-3 py-2 rounded-lg bg-app/30 border border-border-subtle/30 font-mono text-xs text-text-secondary overflow-hidden">
+          <span className="truncate">
+            {isRevealing ? "Decrypting..." : isRevealed ? revealedKey : maskedKey}
+          </span>
+        </div>
       </div>
 
-      {/* ─── Bottom Row: Project + Actions ────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {projectName && (
-            <div className="flex items-center gap-1.5">
+      {/* Bottom Row: Project Info and Hover Actions */}
+      <div className="flex items-center justify-between h-8">
+        <div className="flex items-center">
+          {projectName ? (
+            <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-app/30 border border-border-subtle/30">
               <div
-                className="w-2 h-2 rounded-full"
+                className="w-1.5 h-1.5 rounded-full shadow-sm"
                 style={{ backgroundColor: projectColor || "#71717a" }}
               />
-              <span className="text-xs text-text-muted">{projectName}</span>
+              <span className="text-[11px] font-medium text-text-secondary">{projectName}</span>
             </div>
+          ) : (
+            <div /> // Empty placeholder to maintain flex-between
           )}
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Actions */}
+        <div className="flex items-center gap-1 transition-opacity duration-200">
+          <button
+            onClick={handleReveal}
+            className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle hover:text-text-primary transition-colors flex items-center justify-center"
+            title={isRevealed ? "Hide key" : "Reveal key"}
+          >
+            {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+
           <button
             onClick={handleCopy}
             className={`
-              flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
-              transition-all duration-150
+              flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium
+              transition-all duration-200
               ${
                 isCopied
-                  ? "bg-accent/20 text-accent"
-                  : "bg-border-subtle/50 text-text-secondary hover:bg-accent/15 hover:text-accent"
+                  ? "bg-accent/10 text-accent"
+                  : "text-text-muted hover:bg-border-subtle hover:text-text-primary"
               }
             `}
             title="Copy key"
           >
-            <Copy size={12} />
-            <span>{isCopied ? "Copied!" : "Copy"}</span>
+            <Copy size={13} />
+            <span>{isCopied ? "Copied" : "Copy"}</span>
           </button>
 
-          {/* Context Menu */}
           <div className="relative">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setShowMenu(!showMenu);
               }}
-              className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle/50 hover:text-text-secondary transition-colors"
+              className="p-1.5 rounded-md text-text-muted hover:bg-border-subtle hover:text-text-primary transition-colors"
               title="More options"
             >
               <MoreVertical size={14} />
             </button>
 
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowMenu(false);
-                  }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="absolute right-0 top-full mt-1 z-50 w-44 py-1 rounded-xl bg-sidebar border border-border-subtle shadow-xl"
-                >
-                  {/* Edit */}
-                  <button
+            <AnimatePresence>
+              {showMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowMenu(false);
-                      onEdit?.(id);
                     }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute right-0 top-full mt-1.5 z-50 w-44 py-1.5 rounded-xl bg-sidebar border border-border-subtle shadow-lg"
                   >
-                    <Pen size={12} />
-                    Edit Key
-                  </button>
-                  {/* Dashboard */}
-                  {dashboardUrl && (
-                    <a
-                      href={dashboardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
-                      onClick={(e) => e.stopPropagation()}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        onEdit?.(id);
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
                     >
-                      <ExternalLink size={12} />
-                      Open Dashboard
-                    </a>
-                  )}
-                  {/* Separator */}
-                  <div className="my-1 border-t border-border-subtle/50" />
-                  {/* Delete */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowMenu(false);
-                      onDelete?.(id);
-                    }}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-status-red hover:bg-status-red/10 transition-colors"
-                  >
-                    <Trash2 size={12} />
-                    Delete Key
-                  </button>
-                </motion.div>
-              </>
-            )}
+                      <Pen size={13} />
+                      Edit Key
+                    </button>
+                    {dashboardUrl && (
+                      <a
+                        href={dashboardUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-1.5 text-xs text-text-secondary hover:bg-card hover:text-text-primary transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink size={13} />
+                        Open Dashboard
+                      </a>
+                    )}
+                    <div className="my-1 border-t border-border-subtle/50" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        onDelete?.(id);
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-1.5 text-xs text-status-red hover:bg-status-red/10 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                      Delete Key
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>

@@ -52,12 +52,13 @@ export function DrawerOverlay({
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
             className={`
               fixed top-0 right-0 z-50 h-full ${width}
-              bg-sidebar border-l border-border-subtle
-              shadow-drawer flex flex-col
+              bg-sidebar/95 backdrop-blur-xl border-l border-border-subtle/50
+              shadow-2xl flex flex-col
             `}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-border-subtle shrink-0">
+            <div className="relative flex items-center justify-between px-6 py-5 shrink-0">
+              <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-border-subtle/10 via-border-subtle/60 to-transparent" />
               <div>
                 <h3 className="text-base font-semibold text-text-primary">
                   {title}
@@ -68,7 +69,7 @@ export function DrawerOverlay({
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-card transition-colors"
+                className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
               >
                 <X size={18} />
               </button>

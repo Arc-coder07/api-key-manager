@@ -113,9 +113,6 @@ export function Sidebar() {
         {/* ─── Projects Section ─────────────────────── */}
         <div className="mt-6">
           <div className="flex items-center justify-between px-3 mb-2">
-            <p className="text-xxs font-medium text-text-muted uppercase tracking-widest">
-              Projects
-            </p>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
