@@ -196,7 +196,7 @@ export function ProjectCardsView({
           <div className="flex items-center justify-center gap-3">
             <button
               onClick={onAddProject}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors shadow-glow"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors "
             >
               <Plus size={16} />
               Create Project

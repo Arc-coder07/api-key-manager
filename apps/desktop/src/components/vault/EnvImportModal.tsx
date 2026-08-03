@@ -254,7 +254,7 @@ export function EnvImportModal({ isOpen, onClose, onImport, projects }: EnvImpor
               <button
                 onClick={handleParse}
                 disabled={!rawEnv.trim()}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-glow"
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed "
               >
                 <span>Parse Keys</span>
               </button>
@@ -270,7 +270,7 @@ export function EnvImportModal({ isOpen, onClose, onImport, projects }: EnvImpor
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || previewItems.length === 0}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-glow"
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed "
               >
                 {isSubmitting ? (
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

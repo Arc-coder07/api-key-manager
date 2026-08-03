@@ -86,8 +86,7 @@ export function FinderPage() {
                 w-full pl-12 pr-4 py-3.5 rounded-xl
                 bg-card border border-border-subtle
                 text-base text-text-primary placeholder-text-muted
-                focus:outline-none focus:border-accent/50 focus:shadow-glow
-                transition-all duration-200
+                focus:outline-none focus:border-accent/50 focus:transition-all duration-200
               "
             />
           </div>
@@ -116,7 +115,7 @@ export function FinderPage() {
                     You've hit the maximum 5 searches per day on the free tier. 
                     Upgrade to Premium for unlimited API directory access.
                   </p>
-                  <button className="mt-6 px-6 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent-hover shadow-glow">
+                  <button className="mt-6 px-6 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent-hover ">
                     Upgrade to Premium
                   </button>
                 </div>

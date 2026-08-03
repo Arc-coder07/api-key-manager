@@ -209,7 +209,7 @@ export function ChangePasswordModal({ onClose, onSuccess }: ChangePasswordModalP
                 flex items-center justify-center gap-2
                 ${
                   isValid
-                    ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
+                    ? "bg-accent text-white hover:bg-accent-hover "
                     : "bg-border-subtle text-text-muted cursor-not-allowed"
                 }
               `}
