@@ -35,7 +35,7 @@ export function OnboardingScreen() {
             damping: 15,
             delay: 0.2,
           }}
-          className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-accent/15 border border-accent/20 mb-6 shadow-glow"
+          className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-accent/15 border border-accent/20 mb-6 "
         >
           <Shield size={40} className="text-accent" />
         </motion.div>
@@ -73,7 +73,7 @@ export function OnboardingScreen() {
               ${
                 isLoading
                   ? "bg-accent/50 text-white/70 cursor-not-allowed"
-                  : "bg-accent text-white hover:bg-accent-hover active:scale-[0.99] shadow-glow cursor-pointer"
+                  : "bg-accent text-white hover:bg-accent-hover active:scale-[0.99] cursor-pointer"
               }
             `}
           >

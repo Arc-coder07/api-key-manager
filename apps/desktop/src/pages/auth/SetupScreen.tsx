@@ -208,7 +208,7 @@ export function SetupScreen() {
                     w-full py-3 rounded-xl text-sm font-medium transition-all duration-200
                     ${
                       canProceed
-                        ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
+                        ? "bg-accent text-white hover:bg-accent-hover "
                         : "bg-border-subtle text-text-muted cursor-not-allowed"
                     }
                   `}
@@ -304,7 +304,7 @@ export function SetupScreen() {
                       flex items-center justify-center gap-2
                       ${
                         canSubmit && !isLoading
-                          ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
+                          ? "bg-accent text-white hover:bg-accent-hover "
                           : "bg-border-subtle text-text-muted cursor-not-allowed"
                       }
                     `}

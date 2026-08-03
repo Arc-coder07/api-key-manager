@@ -9,9 +9,8 @@ import {
   Upload,
   Download,
   FolderPlus,
+  Folder,
   Key,
-  LayoutGrid,
-  List,
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
@@ -24,7 +23,6 @@ import { DrawerOverlay } from "../components/ui/DrawerOverlay";
 import { EnvImportModal, type ImportKeyData } from "../components/vault/EnvImportModal";
 import { DeleteKeyConfirmation } from "../components/vault/DeleteKeyConfirmation";
 import { ExportModal, type ExportOptions } from "../components/vault/ExportModal";
-import { ProjectCardsView } from "../components/vault/ProjectCardsView";
 import { ProjectModal } from "../components/projects/ProjectModal";
 import { ToastContainer } from "../components/ui/Toast";
 import { useToast } from "../hooks/useToast";
@@ -60,7 +58,6 @@ export function VaultPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTier, setActiveTier] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<"keys" | "projects">("keys");
   const [syncPrompt, setSyncPrompt] = useState<{ linkId: string; filePath: string } | null>(null);
   const { toasts, dismissToast, success, info, error: toastError } = useToast();
 
@@ -399,7 +396,7 @@ export function VaultPage() {
           {/* Breadcrumb */}
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => { setActiveProject(null); setViewMode(viewMode); }}
+              onClick={() => { setActiveProject(null); }}
               className={`text-lg font-semibold transition-colors ${
                 activeProjectId ? "text-text-muted hover:text-text-primary" : "text-text-primary"
               }`}
@@ -416,32 +413,11 @@ export function VaultPage() {
             )}
           </div>
           <p className="text-sm text-text-muted">
-            {viewMode === "projects" ? `${projects.length} projects` : `${filteredKeys.length} ${filteredKeys.length === 1 ? "key" : "keys"}`}
+            {`${filteredKeys.length} ${filteredKeys.length === 1 ? "key" : "keys"}`}
             {searchQuery && <span className="text-accent"> · searching "{searchQuery}"</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* View Toggle */}
-          <div className="flex items-center bg-card border border-border-subtle rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode("keys")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === "keys" ? "bg-accent/10 text-accent" : "text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              <List size={14} />
-              Keys
-            </button>
-            <button
-              onClick={() => setViewMode("projects")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === "projects" ? "bg-accent/10 text-accent" : "text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              <LayoutGrid size={14} />
-              Projects
-            </button>
-          </div>
           {/* Export */}
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -481,7 +457,7 @@ export function VaultPage() {
               setEditKeyData(null);
               setIsDrawerOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors shadow-glow"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
           >
             <Plus size={16} />
             <span>Add Key</span>
@@ -507,7 +483,7 @@ export function VaultPage() {
                 w-full pl-10 pr-4 py-2.5 rounded-lg
                 bg-card border border-border-subtle
                 text-sm text-text-primary placeholder-text-muted
-                focus:outline-none focus:border-accent/50 focus:shadow-glow
+                focus:outline-none focus:border-accent/50
                 transition-all duration-200
               "
             />
@@ -614,45 +590,52 @@ export function VaultPage() {
 
       {/* ─── Content Area ───────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        {viewMode === "projects" ? (
-          <ProjectCardsView
-            projects={projects}
-            keys={keys_raw}
-            linkedExports={linkedExports}
-            onSelectProject={(pid) => {
-              if (pid === null) {
-                // "Unassigned" card — show unassigned keys
-                setActiveProject(null);
-                setViewMode("keys");
-                // Filter to unassigned via search? Or use activeProjectId convention
-              } else {
-                setActiveProject(pid);
-                setViewMode("keys");
-              }
-            }}
-            onAddKey={() => {
-              setEditKeyId(null);
-              setEditKeyData(null);
-              setIsDrawerOpen(true);
-            }}
-            onAddProject={() => setIsProjectModalOpen(true)}
-          />
-        ) : isVaultEmpty ? (
+        {/* Project Folders Navigation */}
+        {!activeProjectId && projects.length > 0 && !searchQuery && (
+          <div className="mb-8">
+            <h3 className="text-sm font-medium text-text-secondary mb-3 px-1">Projects</h3>
+            <div className="flex gap-3 overflow-x-auto pb-4 hide-scrollbar">
+              {projects.map(project => {
+                const keyCount = keys_raw.filter(k => k.projectId === project.id).length;
+                return (
+                  <motion.button
+                    key={project.id}
+                    layout
+                    whileHover={{ scale: 1.01 }}
+                    onClick={() => setActiveProject(project.id)}
+                    className="flex-shrink-0 flex items-center gap-4 p-4 w-56 rounded-2xl bg-card border border-border-subtle hover:bg-card-hover hover:border-border-active transition-colors shadow-sm hover:shadow-md group"
+                  >
+                    <div 
+                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-app/50 border border-border-subtle rounded-xl shadow-sm"
+                    >
+                      <Folder size={20} style={{ color: project.color || '#71717a' }} />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">{project.name}</p>
+                      <p className="text-xs text-text-muted">{keyCount} {keyCount === 1 ? 'key' : 'keys'}</p>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isVaultEmpty ? (
           /* ─── First-time user empty state ─── */
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-center justify-center h-80 text-center"
           >
-            <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mb-5">
-              <Key size={28} className="text-accent" />
+            <div className="w-16 h-16 rounded-2xl bg-border-subtle/30 flex items-center justify-center mb-5">
+              <Key size={28} className="text-text-muted" />
             </div>
-            <h3 className="text-xl font-semibold text-text-primary">
-              Welcome to Vaultic
+            <h3 className="text-lg font-medium text-text-primary">
+              No keys yet
             </h3>
-            <p className="text-sm text-text-secondary mt-2 max-w-md leading-relaxed">
-              Your vault is empty. Add your first API key to get started — it'll be encrypted
-              with AES-256-GCM and stored securely on your device.
+            <p className="text-sm text-text-secondary mt-1">
+              Add an API key to get started.
             </p>
             <div className="flex items-center gap-3 mt-6">
               <button
@@ -664,7 +647,7 @@ export function VaultPage() {
               </button>
               <button
                 onClick={() => setIsDrawerOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors shadow-glow"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors"
               >
                 <Plus size={16} />
                 Add your first key
@@ -802,7 +785,7 @@ export function VaultPage() {
                   await handleSyncExport(syncPrompt.linkId);
                   setSyncPrompt(null);
                 }}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-glow"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors"
               >
                 <RefreshCw size={12} />
                 Update file

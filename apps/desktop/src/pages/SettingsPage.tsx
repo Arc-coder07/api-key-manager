@@ -179,7 +179,7 @@ function EnablePasswordModal({ onClose }: { onClose: () => void }) {
               disabled={!canSubmit || isSubmitting}
               className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all ${
                 canSubmit && !isSubmitting
-                  ? "bg-accent text-white hover:bg-accent-hover shadow-glow"
+                  ? "bg-accent text-white hover:bg-accent-hover "
                   : "bg-border-subtle text-text-muted cursor-not-allowed"
               }`}
             >
