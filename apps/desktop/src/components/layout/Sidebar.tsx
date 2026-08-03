@@ -82,6 +82,11 @@ export function Sidebar() {
             <NavLink
               key={to}
               to={to}
+              onClick={() => {
+                if (to === "/vault") {
+                  setActiveProject(null);
+                }
+              }}
               className={`
                 flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
                 transition-all duration-150 ease-out group relative
@@ -113,6 +118,9 @@ export function Sidebar() {
         {/* ─── Projects Section ─────────────────────── */}
         <div className="mt-6">
           <div className="flex items-center justify-between px-3 mb-2">
+            <p className="text-xxs font-medium text-text-muted uppercase tracking-widest">
+              Projects
+            </p>
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
