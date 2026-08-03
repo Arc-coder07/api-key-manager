@@ -307,7 +307,7 @@ export function AddKeyForm({
             flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
             ${
               isValid
-                ? "bg-accent text-white hover:brightness-110 shadow-glow"
+                ? "bg-accent text-white hover:brightness-110 "
                 : "bg-border-subtle text-text-muted cursor-not-allowed opacity-50"
             }
           `}

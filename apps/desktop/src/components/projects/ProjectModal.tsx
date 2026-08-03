@@ -138,7 +138,7 @@ export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalPro
                           onClick={() => setColor(c)}
                           className={`
                             w-7 h-7 rounded-full flex items-center justify-center transition-transform
-                            ${color === c ? "scale-110 shadow-glow ring-2 ring-offset-2 ring-offset-card ring-text-muted" : "hover:scale-110"}
+                            ${color === c ? "scale-110 ring-2 ring-offset-2 ring-offset-card ring-text-muted" : "hover:scale-110"}
                           `}
                           style={{ backgroundColor: c }}
                         />

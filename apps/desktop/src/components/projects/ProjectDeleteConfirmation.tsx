@@ -181,7 +181,7 @@ export function ProjectDeleteConfirmation({
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="px-4 py-2 bg-status-red text-white rounded-lg text-sm font-medium hover:bg-status-red/90 transition-colors shadow-glow"
+                    className="px-4 py-2 bg-status-red text-white rounded-lg text-sm font-medium hover:bg-status-red/90 transition-colors "
                   >
                     Delete Project
                   </button>
