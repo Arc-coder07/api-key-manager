@@ -13,19 +13,23 @@ import {
   Key,
   ChevronRight,
   RefreshCw,
+  MoreVertical,
+  Pen,
+  Trash2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { KeyCard } from "../components/vault/KeyCard";
 import { AddKeyForm } from "../components/vault/AddKeyForm";
-import { DrawerOverlay } from "../components/ui/DrawerOverlay";
 import { EnvImportModal, type ImportKeyData } from "../components/vault/EnvImportModal";
 import { DeleteKeyConfirmation } from "../components/vault/DeleteKeyConfirmation";
 import { ExportModal, type ExportOptions } from "../components/vault/ExportModal";
 import { ProjectModal } from "../components/projects/ProjectModal";
+import { ProjectDeleteConfirmation } from "../components/projects/ProjectDeleteConfirmation";
 import { ToastContainer } from "../components/ui/Toast";
 import { useToast } from "../hooks/useToast";
+import { ModalOverlay } from "../components/ui/ModalOverlay";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 import { useVaultStore, type NewKeyInput } from "../stores/useVaultStore";
@@ -58,6 +62,16 @@ export function VaultPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTier, setActiveTier] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<any>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+
+  // Close menus on outside click
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenuId(null);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
   const [syncPrompt, setSyncPrompt] = useState<{ linkId: string; filePath: string } | null>(null);
   const { toasts, dismissToast, success, info, error: toastError } = useToast();
 
@@ -598,26 +612,77 @@ export function VaultPage() {
               {projects.map(project => {
                 const keyCount = keys_raw.filter(k => k.projectId === project.id).length;
                 return (
-                  <motion.button
+                  <div
                     key={project.id}
-                    layout
-                    whileHover={{ scale: 1.01 }}
-                    onClick={() => setActiveProject(project.id)}
-                    className="flex-shrink-0 flex items-center gap-4 p-4 w-56 rounded-2xl bg-card border border-border-subtle hover:bg-card-hover hover:border-border-active transition-colors shadow-sm hover:shadow-md group"
+                    className="relative flex-shrink-0"
                   >
-                    <div 
-                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-app/50 border border-border-subtle rounded-xl shadow-sm"
+                    <motion.button
+                      layout
+                      whileHover={{ scale: 1.01 }}
+                      onClick={() => setActiveProject(project.id)}
+                      className="flex items-center gap-4 p-4 w-56 rounded-2xl bg-card border border-border-subtle hover:bg-card-hover hover:border-border-active transition-colors shadow-sm hover:shadow-md group"
                     >
-                      <Folder size={20} style={{ color: project.color || '#71717a' }} />
-                    </div>
-                    <div className="text-left flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-text-primary truncate">{project.name}</p>
-                      <p className="text-xs text-text-muted">{keyCount} {keyCount === 1 ? 'key' : 'keys'}</p>
-                    </div>
-                  </motion.button>
+                      <div 
+                        className="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-app/50 border border-border-subtle rounded-xl shadow-sm"
+                      >
+                        <Folder size={20} style={{ color: project.color || '#71717a' }} />
+                      </div>
+                      <div className="text-left flex-1 min-w-0 pr-6">
+                        <p className="text-sm font-semibold text-text-primary truncate">{project.name}</p>
+                        <p className="text-xs text-text-muted">{keyCount} {keyCount === 1 ? 'key' : 'keys'}</p>
+                      </div>
+                    </motion.button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === project.id ? null : project.id);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-border-subtle transition-colors z-10"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    <AnimatePresence>
+                      {openMenuId === project.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-14 w-40 py-1 bg-card border border-border-subtle rounded-xl shadow-xl z-50"
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProjectToEdit(project);
+                              setIsProjectModalOpen(true);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-card-hover transition-colors text-left"
+                          >
+                            <Pen size={14} />
+                            Edit Project
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteProjectId(project.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-status-red hover:bg-status-red/10 transition-colors text-left"
+                          >
+                            <Trash2 size={14} />
+                            Delete Project
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })}
             </div>
+            <div className="mt-2 mb-2 border-b border-border-subtle/50" />
           </div>
         )}
 
@@ -700,7 +765,7 @@ export function VaultPage() {
       </div>
 
       {/* ─── Add/Edit Key Drawer ──────────────────────── */}
-      <DrawerOverlay
+      <ModalOverlay
         isOpen={isDrawerOpen}
         onClose={handleCloseDrawer}
         title={editKeyId ? "Edit Key" : "Add New Key"}
@@ -715,7 +780,7 @@ export function VaultPage() {
           onCreateProject={() => setIsProjectModalOpen(true)}
           editData={editKeyData}
         />
-      </DrawerOverlay>
+      </ModalOverlay>
 
       {/* ─── Delete Confirmation ──────────────────────── */}
       <DeleteKeyConfirmation
@@ -738,10 +803,21 @@ export function VaultPage() {
         onSyncExport={handleSyncExport}
       />
 
+      {/* ─── Delete Project Confirmation ──────────────── */}
+      <ProjectDeleteConfirmation
+        isOpen={!!deleteProjectId}
+        onClose={() => setDeleteProjectId(null)}
+        projectToDelete={projects.find(p => p.id === deleteProjectId) || null}
+      />
+
       {/* ─── Project Modal (inline create) ────────────── */}
       <ProjectModal
         isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
+        onClose={() => {
+          setIsProjectModalOpen(false);
+          setProjectToEdit(null);
+        }}
+        projectToEdit={projectToEdit}
       />
 
       {/* ─── Import Env Modal ─────────────────────────── */}
