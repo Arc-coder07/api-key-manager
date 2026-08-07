@@ -59,8 +59,8 @@ export function ProjectModal({ isOpen, onClose, projectToEdit }: ProjectModalPro
         success("Project created", `Project ${name} has been added to your vault.`);
       }
       onClose();
-    } catch (err: any) {
-      error("Error saving project", err.message || "Failed to save project");
+    } catch (err: unknown) {
+      error("Error saving project", err instanceof Error ? err.message : "Failed to save project");
     }
   };
 

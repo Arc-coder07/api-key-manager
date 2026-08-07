@@ -56,8 +56,8 @@ export function ProjectDeleteConfirmation({
       await deleteProject(projectToDelete.id, strategy, reassignId);
       info("Project deleted", `Project ${projectToDelete.name} has been removed.`);
       onClose();
-    } catch (err: any) {
-      error("Deletion failed", err.message || "Could not delete project");
+    } catch (err: unknown) {
+      error("Deletion failed", err instanceof Error ? err.message : "Could not delete project");
     }
   };
 
