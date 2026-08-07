@@ -30,6 +30,9 @@ import type {
   Project,
   VaultConfig,
   LinkedExport,
+  SecurityState,
+  SessionEvent,
+  SessionEventType,
 } from "@vaultic/types";
 
 // ─── LocalForage stores ─────────────────────────────────────────
@@ -59,6 +62,49 @@ const keyStore = localforage.createInstance({
   name: "vaultic",
   storeName: "encryption_key",
 });
+
+/** Security state store: failed attempts, lockout, session history */
+const securityStore = localforage.createInstance({
+  name: "vaultic",
+  storeName: "security",
+});
+
+// ─── Security Constants ─────────────────────────────────────────
+
+const MAX_SESSION_EVENTS = 50;
+const LOCKOUT_SCHEDULE_MS = [
+  0,          // 1st fail: no lockout
+  0,          // 2nd fail: no lockout
+  30_000,     // 3rd fail: 30 seconds
+  120_000,    // 4th fail: 2 minutes
+  600_000,    // 5th fail: 10 minutes
+  1_800_000,  // 6th fail: 30 minutes
+  3_600_000,  // 7th+: 1 hour
+];
+
+function getLockoutDuration(failedAttempts: number): number {
+  const index = Math.min(failedAttempts - 1, LOCKOUT_SCHEDULE_MS.length - 1);
+  return LOCKOUT_SCHEDULE_MS[Math.max(0, index)];
+}
+
+async function loadSecurityState(): Promise<SecurityState> {
+  const state = await securityStore.getItem<SecurityState>("security_state");
+  return state || { failedAttempts: 0, lockoutUntil: null, lastFailedAt: null };
+}
+
+async function saveSecurityState(state: SecurityState): Promise<void> {
+  await securityStore.setItem("security_state", state);
+}
+
+async function logSessionEvent(type: SessionEventType, detail?: string): Promise<void> {
+  const events = (await securityStore.getItem<SessionEvent[]>("session_events")) || [];
+  events.push({ type, timestamp: new Date().toISOString(), detail });
+  // Keep only the most recent events
+  if (events.length > MAX_SESSION_EVENTS) {
+    events.splice(0, events.length - MAX_SESSION_EVENTS);
+  }
+  await securityStore.setItem("session_events", events);
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -95,6 +141,14 @@ interface VaultStoreState {
 
   // ── UI State ───────────────────────────────────
   activeProjectId: string | null;
+
+  // ── Security State ─────────────────────────────
+  /** Current security state (failed attempts, lockout) */
+  securityState: SecurityState;
+  /** Session event history */
+  sessionHistory: SessionEvent[];
+  /** ISO 8601 timestamp of current session start */
+  sessionStartedAt: string | null;
 
   // ── Actions ────────────────────────────────────
   /** Load config from LocalForage and determine initial state */
@@ -159,6 +213,13 @@ interface VaultStoreState {
   removeLinkedExport: (id: string) => Promise<void>;
   updateLinkedExport: (id: string, updates: Partial<LinkedExport>) => Promise<void>;
   getLinkedExportsForProject: (projectId: string | null) => LinkedExport[];
+
+  /** Load security state from LocalForage */
+  loadSecurityState: () => Promise<void>;
+  /** Load session event history */
+  loadSessionHistory: () => Promise<void>;
+  /** Reset failed attempt counter */
+  resetFailedAttempts: () => Promise<void>;
 }
 
 // ─── Helper: Load all vault data from LocalForage ───────────────
@@ -187,6 +248,9 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   config: null,
   linkedExports: [],
   activeProjectId: null,
+  securityState: { failedAttempts: 0, lockoutUntil: null, lastFailedAt: null },
+  sessionHistory: [],
+  sessionStartedAt: null,
 
   // ── initialize ─────────────────────────────────
   // Called once on app startup to check if a vault exists
@@ -291,6 +355,23 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       return false;
     }
 
+    // Check lockout
+    const secState = await loadSecurityState();
+    if (secState.lockoutUntil) {
+      const lockoutEnd = new Date(secState.lockoutUntil).getTime();
+      if (Date.now() < lockoutEnd) {
+        const remaining = Math.ceil((lockoutEnd - Date.now()) / 1000);
+        set({
+          error: `Too many failed attempts. Try again in ${remaining}s`,
+          securityState: secState,
+        });
+        return false;
+      }
+      // Lockout expired — clear it but keep the attempt count
+      secState.lockoutUntil = null;
+      await saveSecurityState(secState);
+    }
+
     set({ isLoading: true, error: null });
     try {
       // Verify password
@@ -302,9 +383,31 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       );
 
       if (!passwordKey) {
-        set({ isLoading: false, error: "Incorrect password" });
+        // Failed attempt
+        secState.failedAttempts += 1;
+        secState.lastFailedAt = new Date().toISOString();
+        const lockoutMs = getLockoutDuration(secState.failedAttempts);
+        if (lockoutMs > 0) {
+          secState.lockoutUntil = new Date(Date.now() + lockoutMs).toISOString();
+        }
+        await saveSecurityState(secState);
+        await logSessionEvent('failed_attempt', `Attempt ${secState.failedAttempts}`);
+
+        const attemptsLeft = Math.max(0, 3 - secState.failedAttempts);
+        const errorMsg = secState.lockoutUntil
+          ? `Incorrect password. Locked for ${Math.ceil(lockoutMs / 1000)}s`
+          : attemptsLeft > 0
+            ? `Incorrect password. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} before lockout`
+            : "Incorrect password";
+
+        set({ isLoading: false, error: errorMsg, securityState: secState });
         return false;
       }
+
+      // Success — reset failed attempts
+      const clearedState: SecurityState = { failedAttempts: 0, lockoutUntil: null, lastFailedAt: null };
+      await saveSecurityState(clearedState);
+      await logSessionEvent('unlock');
 
       // Unwrap the encryption key
       const encryptionKey = await unwrapKey(
@@ -321,6 +424,8 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         isLoading: false,
         derivedKey: encryptionKey,
         lastActivity: Date.now(),
+        securityState: clearedState,
+        sessionStartedAt: new Date().toISOString(),
         ...data,
         error: null,
       });
@@ -335,12 +440,14 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
   // ── lock ───────────────────────────────────────
   // Wipe derived key from memory (only useful when password is enabled)
   lock: () => {
+    logSessionEvent('lock');
     set({
       isUnlocked: false,
       derivedKey: null,
       keys: [],
       projects: [],
       linkedExports: [],
+      sessionStartedAt: null,
       error: null,
     });
   },
@@ -376,6 +483,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       };
 
       await configStore.setItem("vault_config", newConfig);
+      await logSessionEvent('password_enabled');
       set({ config: newConfig, isLoading: false });
 
       return true;
@@ -428,6 +536,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       };
 
       await configStore.setItem("vault_config", newConfig);
+      await logSessionEvent('password_disabled');
       set({ config: newConfig, isLoading: false });
 
       return true;
@@ -482,6 +591,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
       };
 
       await configStore.setItem("vault_config", newConfig);
+      await logSessionEvent('password_changed');
 
       set({
         config: newConfig,
@@ -591,8 +701,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
         derivedKey
       );
       return plaintext;
-    } catch (err) {
-      console.error("Failed to decrypt key (likely wrong derivation or stale data):", err);
+    } catch {
       return null;
     }
   },
@@ -685,6 +794,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
     const timeoutMs = config.autoLockMinutes * 60 * 1000;
     if (Date.now() - lastActivity > timeoutMs) {
+      logSessionEvent('auto_lock', `After ${config.autoLockMinutes} min inactivity`);
       lock();
     }
   },
@@ -762,5 +872,23 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
 
   getLinkedExportsForProject: (projectId: string | null) => {
     return get().linkedExports.filter((l) => l.projectId === projectId);
+  },
+
+  // ── Security Actions ────────────────────────────
+
+  loadSecurityState: async () => {
+    const secState = await loadSecurityState();
+    set({ securityState: secState });
+  },
+
+  loadSessionHistory: async () => {
+    const events = (await securityStore.getItem<SessionEvent[]>("session_events")) || [];
+    set({ sessionHistory: events });
+  },
+
+  resetFailedAttempts: async () => {
+    const clearedState: SecurityState = { failedAttempts: 0, lockoutUntil: null, lastFailedAt: null };
+    await saveSecurityState(clearedState);
+    set({ securityState: clearedState });
   },
 }));

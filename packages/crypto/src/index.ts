@@ -18,7 +18,7 @@
 //     their password to unwrap the key on each app launch.
 // ─────────────────────────────────────────────────────────────────
 
-const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_ITERATIONS = 600_000;
 const SALT_LENGTH = 16; // bytes
 const IV_LENGTH = 12;   // bytes (AES-GCM standard)
 const KEY_LENGTH = 256;  // bits
@@ -46,7 +46,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 // ─── Salt Generation ────────────────────────────────────────────
 
 /** Generate a cryptographically random salt */
-export function generateSalt(): string {
+function generateSalt(): string {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   return arrayBufferToBase64(salt.buffer);
 }
@@ -62,6 +62,11 @@ export function generateSalt(): string {
  *
  * @returns A CryptoKey that can be used for encrypt/decrypt and exported
  */
+// SECURITY NOTE: Working encryption keys are kept extractable because they
+// may need to be exported (for raw storage) or re-wrapped (when changing
+// passwords). The tradeoff is accepted because the Web Crypto API prevents
+// cross-origin access to CryptoKey objects. XSS mitigation is handled via
+// strict CSP headers in tauri.conf.json.
 export async function generateEncryptionKey(): Promise<CryptoKey> {
   return crypto.subtle.generateKey(
     { name: 'AES-GCM', length: KEY_LENGTH },
@@ -173,47 +178,6 @@ export async function unwrapKey(
 // KEY DERIVATION (PBKDF2) — Used for Password Mode
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Derive an AES-256-GCM key from a master password.
- * Used to create the wrapping key for password mode.
- *
- * @param password - The user's master password (never stored)
- * @param salt     - Base64-encoded salt (stored in VaultConfig)
- * @returns An opaque CryptoKey that can be used for wrap/unwrap
- */
-export async function deriveKey(
-  password: string,
-  salt: string
-): Promise<CryptoKey> {
-  const encoder = new TextEncoder();
-  const passwordBuffer = encoder.encode(password);
-  const saltBuffer = base64ToArrayBuffer(salt);
-
-  // Import the raw password as a PBKDF2 key
-  const baseKey = await crypto.subtle.importKey(
-    'raw',
-    passwordBuffer,
-    'PBKDF2',
-    false, // not extractable
-    ['deriveKey']
-  );
-
-  // Derive the AES-GCM key
-  const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: saltBuffer,
-      iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256',
-    },
-    baseKey,
-    { name: 'AES-GCM', length: KEY_LENGTH },
-    false, // not extractable — stays in Web Crypto
-    ['encrypt', 'decrypt']
-  );
-
-  return derivedKey;
-}
 
 // ─── Verification ───────────────────────────────────────────────
 
@@ -303,8 +267,8 @@ export async function createPasswordEnvelope(password: string): Promise<{
     ['deriveKey']
   );
 
-  // Derive extractable key for verification hash
-  const extractableKey = await crypto.subtle.deriveKey(
+  // Single derivation — used for both verification and wrapping
+  const derivedKey = await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
@@ -313,11 +277,12 @@ export async function createPasswordEnvelope(password: string): Promise<{
     },
     baseKey,
     { name: 'AES-GCM', length: KEY_LENGTH },
-    true,
+    true, // extractable — needed for verification hash and key wrapping
     ['encrypt', 'decrypt']
   );
 
-  const keyData = await crypto.subtle.exportKey('raw', extractableKey);
+  // Compute verification hash
+  const keyData = await crypto.subtle.exportKey('raw', derivedKey);
   const vSaltBuffer = base64ToArrayBuffer(verificationSalt);
   const combined = new Uint8Array(keyData.byteLength + vSaltBuffer.byteLength);
   combined.set(new Uint8Array(keyData), 0);
@@ -325,14 +290,8 @@ export async function createPasswordEnvelope(password: string): Promise<{
   const hash = await crypto.subtle.digest('SHA-256', combined);
   const verificationHash = arrayBufferToBase64(hash);
 
-  // Derive the non-extractable key for runtime use
-  const derivedKey = await deriveKey(password, salt);
-
   return { salt, verificationSalt, verificationHash, derivedKey };
 }
-
-// Keep legacy setupVault as an alias for backward compatibility
-export const setupVault = createPasswordEnvelope;
 
 // ─── Encryption (AES-256-GCM) ───────────────────────────────────
 

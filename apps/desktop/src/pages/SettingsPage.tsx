@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { SessionEvent } from "@vaultic/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useVaultStore } from "../stores/useVaultStore";
@@ -21,6 +22,7 @@ import {
   EyeOff,
   Loader2,
   Check,
+  History,
 } from "lucide-react";
 
 // Animated settings row
@@ -294,6 +296,17 @@ export function SettingsPage() {
   const isMigrating = useVaultStore((s) => s.isMigrating);
   const migrationProgress = useVaultStore((s) => s.migrationProgress);
 
+  const sessionHistory = useVaultStore((s) => s.sessionHistory);
+  const sessionStartedAt = useVaultStore((s) => s.sessionStartedAt);
+  const loadSessionHistory = useVaultStore((s) => s.loadSessionHistory);
+  const securityState = useVaultStore((s) => s.securityState);
+  const loadSecurityState = useVaultStore((s) => s.loadSecurityState);
+
+  useEffect(() => {
+    loadSessionHistory();
+    loadSecurityState();
+  }, [loadSessionHistory, loadSecurityState]);
+
   const passwordEnabled = config?.passwordEnabled ?? false;
   const autoLock = config?.autoLockMinutes ?? 15;
   const clipboardClear = config?.clipboardClearSeconds ?? 30;
@@ -487,7 +500,7 @@ export function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-text-primary">Vaultic</p>
-                  <p className="text-xs text-text-muted">v0.2.0</p>
+                  <p className="text-xs text-text-muted">v0.1.0</p>
                 </div>
               </div>
               <p className="text-xs text-text-secondary leading-relaxed">
@@ -499,6 +512,68 @@ export function SettingsPage() {
               </p>
             </div>
           </section>
+
+          {/* ─── Session History Section ──────────────── */}
+          {passwordEnabled && (
+            <section className="space-y-3">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-widest">
+                <History size={14} className="text-accent" />
+                Session History
+              </h3>
+              <div className="p-5 rounded-xl bg-card border border-border-subtle space-y-3">
+                {/* Current session info */}
+                {sessionStartedAt && (
+                  <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">Current Session</p>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Started {new Date(sessionStartedAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xxs font-medium bg-accent/10 text-accent">Active</span>
+                  </div>
+                )}
+
+                {/* Recent events */}
+                {sessionHistory.length > 0 ? (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {[...sessionHistory].reverse().slice(0, 20).map((event, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-border-subtle/30 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            event.type === 'unlock' ? 'bg-accent' :
+                            event.type === 'failed_attempt' ? 'bg-status-red' :
+                            event.type === 'lock' || event.type === 'auto_lock' ? 'bg-status-amber' :
+                            'bg-text-muted'
+                          }`} />
+                          <span className="text-xs text-text-secondary">
+                            {event.type === 'unlock' ? 'Unlocked' :
+                             event.type === 'lock' ? 'Locked' :
+                             event.type === 'auto_lock' ? 'Auto-locked' :
+                             event.type === 'failed_attempt' ? 'Failed attempt' :
+                             event.type === 'password_changed' ? 'Password changed' :
+                             event.type === 'password_enabled' ? 'Password enabled' :
+                             event.type === 'password_disabled' ? 'Password disabled' :
+                             event.type}
+                          </span>
+                        </div>
+                        <span className="text-xxs text-text-muted font-mono">
+                          {new Date(event.timestamp).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-muted text-center py-2">
+                    No session events yet
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
         </motion.div>
       </div>
 

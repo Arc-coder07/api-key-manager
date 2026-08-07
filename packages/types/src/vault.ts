@@ -65,6 +65,40 @@ export interface DrawerState {
   keyId: string | null;
 }
 
+// ─── Security State ─────────────────────────────────────────────
+// Tracks failed unlock attempts and lockout state.
+// Persisted to LocalForage security store.
+
+export interface SecurityState {
+  /** Number of consecutive failed unlock attempts */
+  failedAttempts: number;
+  /** ISO 8601 timestamp when lockout expires (null if not locked out) */
+  lockoutUntil: string | null;
+  /** ISO 8601 timestamp of last failed attempt */
+  lastFailedAt: string | null;
+}
+
+// ─── Session Events ─────────────────────────────────────────────
+// Audit log entries for security-relevant vault actions.
+
+export type SessionEventType =
+  | 'unlock'
+  | 'lock'
+  | 'auto_lock'
+  | 'failed_attempt'
+  | 'password_changed'
+  | 'password_enabled'
+  | 'password_disabled';
+
+export interface SessionEvent {
+  /** Event type */
+  type: SessionEventType;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+  /** Optional metadata (e.g., "auto-lock after 15 min", "attempt 3 of 5") */
+  detail?: string;
+}
+
 // ─── Linked Export ──────────────────────────────────────────────
 // Represents a link between a project's keys and a file on disk.
 // When autoSync is enabled, Vaultic updates the file on key changes.
@@ -87,3 +121,4 @@ export interface LinkedExport {
   /** ISO 8601 timestamp when this link was created */
   createdAt: string;
 }
+

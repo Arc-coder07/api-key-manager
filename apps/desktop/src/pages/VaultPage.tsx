@@ -39,18 +39,12 @@ import {
   generateJsonFullExport,
   generateJsonMetadataExport,
 } from "../utils/envParser";
+import type { Project } from "@vaultic/types";
+import { API_CATEGORIES } from "@vaultic/types";
 
 const FILTER_CATEGORIES: { value: string; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "ai", label: "AI" },
-  { value: "payments", label: "Payments" },
-  { value: "auth", label: "Auth" },
-  { value: "messaging", label: "Messaging" },
-  { value: "email", label: "Email" },
-  { value: "maps", label: "Maps" },
-  { value: "devtools", label: "Dev Tools" },
-  { value: "storage", label: "Storage" },
-  { value: "other", label: "Other" },
+  ...API_CATEGORIES.map(c => ({ value: c.value, label: c.label })),
 ];
 
 export function VaultPage() {
@@ -62,7 +56,7 @@ export function VaultPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTier, setActiveTier] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [projectToEdit, setProjectToEdit] = useState<any>(null);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
 
@@ -77,7 +71,7 @@ export function VaultPage() {
 
   // Edit key state
   const [editKeyId, setEditKeyId] = useState<string | null>(null);
-  const [editKeyData, setEditKeyData] = useState<any>(null);
+  const [editKeyData, setEditKeyData] = useState<NewKeyInput | null>(null);
 
   // Delete confirmation state
   const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null);
@@ -329,6 +323,9 @@ export function VaultPage() {
       });
       if (!filePath) return null; // user cancelled
 
+      // Register the user-selected path with the Tauri backend
+      await invoke("register_dialog_path", { path: filePath });
+
       // Write via Tauri backend
       await invoke("write_file_to_path", { path: filePath, content: result.content });
       success("Saved", `Exported to ${filePath.split("/").pop()}`);
@@ -358,6 +355,7 @@ export function VaultPage() {
       const scope = !link.projectId ? "all" as const : link.projectId === "__unassigned__" ? "unassigned" as const : "project" as const;
       const result = await buildExportContent({ format: link.format, exportType: link.exportType, scope, projectId: scopeProjectId });
       if (!result) { info("Nothing to sync", "No keys for this scope"); return; }
+      await invoke("register_dialog_path", { path: link.filePath });
       await invoke("write_file_to_path", { path: link.filePath, content: result.content });
       await updateLinkedExport(id, { lastSynced: new Date().toISOString() });
       success("Synced", `Updated ${link.filePath.split("/").pop()}`);

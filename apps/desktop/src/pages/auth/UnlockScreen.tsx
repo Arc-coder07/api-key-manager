@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Shield, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { useVaultStore } from "../../stores/useVaultStore";
@@ -10,6 +10,32 @@ export function UnlockScreen() {
   const unlock = useVaultStore((s) => s.unlock);
   const isLoading = useVaultStore((s) => s.isLoading);
   const error = useVaultStore((s) => s.error);
+  const securityState = useVaultStore((s) => s.securityState);
+  const loadSecurityState = useVaultStore((s) => s.loadSecurityState);
+
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
+
+  // Load security state on mount
+  useEffect(() => {
+    loadSecurityState();
+  }, [loadSecurityState]);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (!securityState.lockoutUntil) {
+      setLockoutRemaining(0);
+      return;
+    }
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(securityState.lockoutUntil!).getTime() - Date.now()) / 1000));
+      setLockoutRemaining(remaining);
+    };
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [securityState.lockoutUntil]);
+
+  const isLockedOut = lockoutRemaining > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,9 +129,34 @@ export function UnlockScreen() {
               )}
             </div>
 
+            {/* Lockout countdown */}
+            {isLockedOut && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 rounded-xl bg-status-red/5 border border-status-red/15 text-center"
+              >
+                <p className="text-xs text-status-red font-medium">
+                  Too many failed attempts
+                </p>
+                <p className="text-lg font-mono font-bold text-status-red mt-1">
+                  {Math.floor(lockoutRemaining / 60)}:{String(lockoutRemaining % 60).padStart(2, '0')}
+                </p>
+                <p className="text-xxs text-text-muted mt-0.5">
+                  Try again when the timer expires
+                </p>
+              </motion.div>
+            )}
+
+            {securityState.failedAttempts > 0 && !isLockedOut && !error && (
+              <p className="text-xxs text-status-amber text-center">
+                {securityState.failedAttempts} failed attempt{securityState.failedAttempts === 1 ? '' : 's'}
+              </p>
+            )}
+
             <button
               type="submit"
-              disabled={!password.trim() || isLoading}
+              disabled={!password.trim() || isLoading || isLockedOut}
               className={`
                 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200
                 flex items-center justify-center gap-2
