@@ -71,7 +71,7 @@ export function VaultPage() {
 
   // Edit key state
   const [editKeyId, setEditKeyId] = useState<string | null>(null);
-  const [editKeyData, setEditKeyData] = useState<NewKeyInput | null>(null);
+  const [editKeyData, setEditKeyData] = useState<(NewKeyInput & { id: string }) | null>(null);
 
   // Delete confirmation state
   const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null);

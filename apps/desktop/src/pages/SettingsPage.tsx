@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import type { SessionEvent } from "@vaultic/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useVaultStore } from "../stores/useVaultStore";
@@ -299,7 +298,6 @@ export function SettingsPage() {
   const sessionHistory = useVaultStore((s) => s.sessionHistory);
   const sessionStartedAt = useVaultStore((s) => s.sessionStartedAt);
   const loadSessionHistory = useVaultStore((s) => s.loadSessionHistory);
-  const securityState = useVaultStore((s) => s.securityState);
   const loadSecurityState = useVaultStore((s) => s.loadSecurityState);
 
   useEffect(() => {
