@@ -22,7 +22,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[Vaultic Error Boundary]", error, info.componentStack);
+    if (import.meta.env.DEV) {
+      console.error("[Vaultic Error Boundary]", error, info.componentStack);
+    }
   }
 
   handleReset = () => {

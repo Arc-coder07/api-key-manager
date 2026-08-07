@@ -105,7 +105,9 @@ export function KeyCard({
           }, 15000);
         }
       } catch (err) {
-        console.error("Reveal error:", err);
+        if (import.meta.env.DEV) {
+          console.error("Reveal error:", err);
+        }
       } finally {
         setIsRevealing(false);
       }
